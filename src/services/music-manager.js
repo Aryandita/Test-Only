@@ -23,33 +23,17 @@ export class MusicManager {
       restTimeout: 10_000
     });
 
-    this.shoukaku.on('ready', (name) => {
-      console.log(`✅🎵 Node Lavalink **${name}** berhasil terhubung! Mari nge-beat!`);
-    });
-
-    this.shoukaku.on('error', (name, error) => {
-      console.error(`❌🎵 Node Lavalink **${name}** gagal/terputus: ${error.message}`);
-    });
-
-    this.shoukaku.on('close', (name, code, reason) => {
-      console.warn(`⚠️🎵 Node Lavalink **${name}** ditutup (code: ${code}) reason: ${reason}`);
-    });
-
-    this.shoukaku.on('disconnect', (name, count) => {
-      console.warn(`🔌 Node **${name}** disconnect. Retry ke-${count}...`);
-    });
+    this.shoukaku.on('ready', (name) => console.log(`✅🎵 Node Lavalink ${name} terhubung!`));
+    this.shoukaku.on('error', (name, error) => console.error(`❌🎵 Node ${name} error: ${error.message}`));
+    this.shoukaku.on('close', (name, code, reason) =>
+      console.warn(`⚠️🎵 Node ${name} ditutup (code: ${code}) reason: ${reason}`)
+    );
   }
 
   getQueue(guildId) {
     if (!queueStore.has(guildId)) {
-      queueStore.set(guildId, {
-        tracks: [],
-        current: null,
-        textChannelId: null,
-        loop: false
-      });
+      queueStore.set(guildId, { tracks: [], current: null, textChannelId: null, loop: false });
     }
-
     return queueStore.get(guildId);
   }
 
@@ -69,7 +53,6 @@ export class MusicManager {
       }
     });
 
-    console.log(`🔊 Bot join voice channel ${voiceChannelId} di guild ${guildId}`);
     return player;
   }
 
@@ -79,10 +62,7 @@ export class MusicManager {
 
     const keyword = query.startsWith('http') ? query : `ytsearch:${query}`;
     const result = await node.rest.resolve(keyword);
-
-    if (result.loadType === 'empty' || !result.data?.length) {
-      return null;
-    }
+    if (result.loadType === 'empty' || !result.data?.length) return null;
 
     return result.data[0];
   }
@@ -90,13 +70,26 @@ export class MusicManager {
   async enqueue({ guildId, track, textChannelId }) {
     const queue = this.getQueue(guildId);
     queue.textChannelId = textChannelId;
-    queue.tracks.push(track);
 
-    if (!queue.current) {
-      await this.playNext(guildId);
+    const wasPlaying = Boolean(queue.current);
+    if (wasPlaying) {
+      queue.tracks.push(track);
+      return {
+        queue,
+        status: 'queued',
+        track,
+        position: queue.tracks.length
+      };
     }
 
-    return queue;
+    queue.tracks.push(track);
+    const startedTrack = await this.playNext(guildId);
+    return {
+      queue,
+      status: 'playing',
+      track: startedTrack ?? track,
+      position: null
+    };
   }
 
   async playNext(guildId) {
@@ -110,23 +103,18 @@ export class MusicManager {
     }
 
     const nextTrack = queue.tracks.shift();
-
     if (!nextTrack) {
       queue.current = null;
       await player.stopTrack();
-      console.log(`📭 Queue kosong di guild ${guildId}. Playback dihentikan.`);
       return null;
     }
 
     queue.current = nextTrack;
 
     const encodedTrack = nextTrack.encoded ?? nextTrack.track ?? nextTrack.encodedTrack;
-    if (!encodedTrack) {
-      throw new Error('Encoded track tidak ditemukan dari hasil Lavalink.');
-    }
+    if (!encodedTrack) throw new Error('Encoded track tidak ditemukan dari hasil Lavalink.');
 
     await player.playTrack({ encodedTrack });
-    console.log(`▶️ Memutar: ${nextTrack.info.title}`);
     return nextTrack;
   }
 
@@ -148,8 +136,6 @@ export class MusicManager {
       await player.stopTrack();
       await this.shoukaku.leaveVoiceChannel(guildId);
     }
-
-    console.log(`🛑 Playback dihentikan dan queue dibersihkan (guild ${guildId}).`);
   }
 
   toggleLoop(guildId) {

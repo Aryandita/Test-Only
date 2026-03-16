@@ -1,4 +1,5 @@
 import { handleCommand, handlePrefixCommand } from '../commands/handlers.js';
+import { createStatusEmbed } from '../utils/music-ui.js';
 
 export function registerInteractionHandler(client, context) {
   client.on('interactionCreate', async (interaction) => {
@@ -9,14 +10,20 @@ export function registerInteractionHandler(client, context) {
       }
 
       if (interaction.isButton()) {
-        const { musicManager } = context;
+        const { musicManager, env } = context;
         if (!interaction.customId.startsWith('music:')) return;
 
         switch (interaction.customId) {
           case 'music:skip': {
             const track = await musicManager.skip(interaction.guildId);
             await interaction.reply({
-              content: track ? `⏭️ Skip ke **${track.info.title}**` : '📭 Antrian habis.',
+              embeds: [
+                createStatusEmbed({
+                  color: env.embedHex,
+                  title: '⏭️ Skip',
+                  description: track ? `Lanjut: **${track.info.title}**` : 'Antrian habis.'
+                })
+              ],
               ephemeral: true
             });
             return;
@@ -25,7 +32,13 @@ export function registerInteractionHandler(client, context) {
           case 'music:loop': {
             const enabled = musicManager.toggleLoop(interaction.guildId);
             await interaction.reply({
-              content: `🔁 Loop sekarang: **${enabled ? 'Aktif ✅' : 'Mati ❌'}**`,
+              embeds: [
+                createStatusEmbed({
+                  color: env.embedHex,
+                  title: '🔁 Loop',
+                  description: enabled ? 'Loop diaktifkan.' : 'Loop dimatikan.'
+                })
+              ],
               ephemeral: true
             });
             return;
@@ -33,7 +46,16 @@ export function registerInteractionHandler(client, context) {
 
           case 'music:stop': {
             await musicManager.stop(interaction.guildId);
-            await interaction.reply({ content: '⏹️ Musik dihentikan.', ephemeral: true });
+            await interaction.reply({
+              embeds: [
+                createStatusEmbed({
+                  color: env.embedHex,
+                  title: '⏹️ Stop',
+                  description: 'Musik dihentikan.'
+                })
+              ],
+              ephemeral: true
+            });
             return;
           }
 
@@ -43,7 +65,16 @@ export function registerInteractionHandler(client, context) {
       }
     } catch (error) {
       console.error(`❌ [Interaction Error] ${error.message}`);
-      const payload = { content: `Terjadi error: ${error.message}`, ephemeral: true };
+      const payload = {
+        embeds: [
+          createStatusEmbed({
+            color: context.env.embedHex,
+            title: '❌ Error',
+            description: error.message
+          })
+        ],
+        ephemeral: true
+      };
 
       if (interaction.deferred || interaction.replied) {
         await interaction.followUp(payload);

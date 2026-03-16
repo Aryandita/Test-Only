@@ -1,5 +1,7 @@
-const PERSONA_MEMBER = `Kamu adalah asisten Discord yang ramah, singkat, helpful, dan aman. Gunakan bahasa Indonesia santai namun sopan.`;
-const PERSONA_OWNER = `Kamu adalah asisten private untuk owner bot. Jawaban harus detail, fokus operasional bot, troubleshooting teknis, dan prioritas keamanan.`;
+const PERSONA_MEMBER =
+  'Jawab langsung ke inti dalam bahasa Indonesia, tanpa salam pembuka/penutup, tanpa menyebut model AI, tetap sopan dan ringkas.';
+const PERSONA_OWNER =
+  'Jawab langsung ke inti untuk kebutuhan owner bot, detail teknis bila perlu, tanpa salam, tanpa menyebut model AI.';
 
 export class AIService {
   constructor(apiKey, ownerId) {
@@ -14,17 +16,13 @@ export class AIService {
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${this.apiKey}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: systemInstruction }]
-          },
+          systemInstruction: { parts: [{ text: systemInstruction }] },
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
-            temperature: userId === this.ownerId ? 0.6 : 0.8,
-            maxOutputTokens: 600
+            temperature: userId === this.ownerId ? 0.6 : 0.7,
+            maxOutputTokens: 700
           }
         })
       }
@@ -36,6 +34,7 @@ export class AIService {
     }
 
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? 'Tidak ada jawaban dari Gemini.';
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    return text || 'Tidak ada jawaban yang bisa diberikan untuk prompt tersebut.';
   }
 }

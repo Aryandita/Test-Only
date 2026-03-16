@@ -2,11 +2,12 @@
 
 Bot Discord dengan fitur:
 - Music player berbasis **Lavalink 4.2.2** (Shoukaku client).
-- Kontrol tombol **Components V2** (skip/loop/stop).
+- Kontrol tombol musik + semua respon dirapikan dalam **embed berwarna dari hex di .env**.
 - Integrasi AI **Gemini 2.5 Flash**.
 - Persona AI berbeda untuk **owner** dan **member**.
 - Command owner: `/restart`, `/owner-stats`, `/owner-sync`.
 - Prefix command juga aktif (default `!`), contoh `!play`, `!ai`.
+- Saat `/play` dipakai ketika musik sedang berjalan, lagu akan otomatis masuk antrian.
 
 ## 1) Requirement
 - Node.js **24+**
@@ -76,9 +77,15 @@ Prefix default `!` (ubah via `BOT_PREFIX`).
 - `!help`
 
 ## 6) AI Persona & Style
+AI dirancang menjawab langsung ke inti tanpa menyebut model dan tanpa salam pembuka/penutup.
 - **Owner persona**: respons detail, fokus operasional bot/troubleshooting.
 - **Member persona**: respons ringkas, ramah, aman.
 - Warna embed bisa pakai `AI_EMBED_COLOR_HEX` (legacy) atau `EMBED_HEX` (baru). Jika nilainya salah format, bot akan fallback ke `#5865F2` dan menampilkan warning.
 
 ## 7) Fix untuk Error "Bad Request" saat play
 Pada versi ini, payload playback sudah disesuaikan dengan Lavalink v4 (`encodedTrack`) untuk mencegah error `Bad Request` saat memutar lagu.
+
+
+## 8) Tampilan Embed
+- Semua pesan command utama (play/skip/stop/queue/loop/ai/help) menggunakan embed dengan warna dari `EMBED_HEX` atau `AI_EMBED_COLOR_HEX`.
+- `/play` menampilkan thumbnail dari `artworkUrl` jika tersedia.
