@@ -27,9 +27,17 @@ const lavalinkHosts = parseList(process.env.LAVALINK_HOSTS || process.env.LAVALI
 const lavalinkPorts = parseList(process.env.LAVALINK_PORTS || process.env.LAVALINK_PORT || '3010');
 const lavalinkPasswords = parseList(process.env.LAVALINK_PASSWORDS || process.env.LAVALINK_PASSWORD || 'dsc.gg/kythia');
 const lavalinkSecures = parseList(process.env.LAVALINK_SECURES || process.env.LAVALINK_SECURE || 'false');
-const ownerIds = new Set(
-  parseList(process.env.OWNER_IDS),
-);
+const ownerIds = new Set(parseList(process.env.OWNER_IDS));
+
+const parseHexColor = (hex) => {
+  if (!hex) return null;
+  const normalized = hex.replace('#', '').trim();
+  if (!/^[0-9A-Fa-f]{6}$/.test(normalized)) return null;
+  return Number.parseInt(normalized, 16);
+};
+
+const defaultEmbedColor = parseHexColor(process.env.EMBED_COLOR || '#5865F2') || 0x5865f2;
+const guildEmbedColors = new Map();
 
 const lavalinkNodes = lavalinkHosts.map((host, index) => ({
   identifier: `node-${index + 1}`,
@@ -65,15 +73,39 @@ const manager = new Manager({
 
 const OWNER_PERSONA = [
   'Kamu adalah asisten AI khusus untuk OWNER bot Discord.',
-  'Gaya bahasa: ringkas, teknis, to-the-point, boleh memberi saran konfigurasi production-grade.',
+  'Jawaban harus langsung ke inti, tanpa pembukaan panjang, tanpa menyebut persona, tanpa menjelaskan alur berpikir internal.',
   'Fokus: debugging, arsitektur bot/music, keamanan token, performa Lavalink.',
 ].join(' ');
 
 const MEMBER_PERSONA = [
-  'Kamu adalah asisten AI ramah untuk member server Discord.',
-  'Gaya bahasa: santai, jelas, tidak terlalu teknis, berikan langkah sederhana.',
-  'Fokus: membantu penggunaan command bot, rekomendasi lagu, dan troubleshooting ringan.',
+  'Kamu adalah asisten AI untuk member server Discord.',
+  'Jawaban harus langsung ke inti, praktis, tanpa menyebut persona, tanpa menjelaskan alur berpikir internal.',
+  'Fokus: penggunaan command bot, rekomendasi lagu, dan troubleshooting ringan.',
 ].join(' ');
+
+const getEmbedColor = (guildId) => guildEmbedColors.get(guildId) || defaultEmbedColor;
+
+const buildEmbed = ({ guildId, title, description, color, thumbnail, url, footer }) => {
+  const embed = new EmbedBuilder()
+    .setColor(color || getEmbedColor(guildId))
+    .setTitle(title)
+    .setDescription(description);
+
+  if (thumbnail) embed.setThumbnail(thumbnail);
+  if (url) embed.setURL(url);
+  if (footer) embed.setFooter({ text: footer });
+  return embed;
+};
+
+const sendCommandEmbed = async (ctx, payload) => {
+  const guildId = ctx.guildId || ctx.guild?.id;
+  const embed = buildEmbed({ guildId, ...payload });
+
+  if ('isRepliable' in ctx && typeof ctx.isRepliable === 'function') {
+    return ctx.reply({ embeds: [embed], ephemeral: Boolean(payload.ephemeral) });
+  }
+  return ctx.reply({ embeds: [embed] });
+};
 
 const generateGeminiResponse = async ({ prompt, isOwner }) => {
   if (!geminiApiKey) {
@@ -88,15 +120,8 @@ const generateGeminiResponse = async ({ prompt, isOwner }) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemInstruction }],
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: prompt }],
-          },
-        ],
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
       }),
     },
   );
@@ -110,13 +135,16 @@ const generateGeminiResponse = async ({ prompt, isOwner }) => {
   const text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text).filter(Boolean).join('\n');
   if (!text) throw new Error('Gemini tidak mengembalikan jawaban teks.');
 
-  return text;
+  return text.trim();
 };
 
 const ensurePlayer = async (message) => {
   const voiceChannel = message.member?.voice?.channel;
   if (!voiceChannel) {
-    await message.reply('Masuk voice channel dulu sebelum pakai command music.');
+    await sendCommandEmbed(message, {
+      title: '⚠️ Voice Channel Diperlukan',
+      description: 'Masuk voice channel dulu sebelum pakai command music.',
+    });
     return null;
   }
 
@@ -134,11 +162,7 @@ const ensurePlayer = async (message) => {
 
 const queuePreview = (player) => {
   if (!player?.queue?.size) return 'Queue kosong.';
-
-  return player.queue
-    .slice(0, 10)
-    .map((track, index) => `${index + 1}. ${track.title} [${track.duration}]`)
-    .join('\n');
+  return player.queue.slice(0, 10).map((track, index) => `${index + 1}. ${track.title} [${track.duration}]`).join('\n');
 };
 
 const getTrackThumbnail = (track) => {
@@ -154,14 +178,9 @@ const getTrackThumbnail = (track) => {
 
 const buildPlayerControls = (player) => {
   const isPaused = Boolean(player?.paused);
-
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('music_toggle_pause')
-        .setLabel(isPaused ? 'Play' : 'Pause')
-        .setStyle(isPaused ? ButtonStyle.Success : ButtonStyle.Secondary)
-        .setEmoji(isPaused ? '▶️' : '⏸️'),
+      new ButtonBuilder().setCustomId('music_toggle_pause').setLabel(isPaused ? 'Play' : 'Pause').setStyle(isPaused ? ButtonStyle.Success : ButtonStyle.Secondary).setEmoji(isPaused ? '▶️' : '⏸️'),
       new ButtonBuilder().setCustomId('music_stop').setLabel('Stop').setStyle(ButtonStyle.Danger).setEmoji('⏹️'),
       new ButtonBuilder().setCustomId('music_loop').setLabel('Loop').setStyle(ButtonStyle.Primary).setEmoji('🔁'),
       new ButtonBuilder().setCustomId('music_queue').setLabel('Queue').setStyle(ButtonStyle.Secondary).setEmoji('📜'),
@@ -174,15 +193,14 @@ const sendNowPlayingMessage = async (player, track) => {
   const textChannel = client.channels.cache.get(player.textChannel);
   if (!textChannel) return;
 
-  const thumbnail = getTrackThumbnail(track);
-  const embed = new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle('🎶 Now Playing')
-    .setDescription(`**${track.title}**\nDuration: \`${track.duration}\`\nVolume: **${player.volume}%**`)
-    .setURL(track.uri || null)
-    .setFooter({ text: `Requester: ${track.requester?.tag || 'Unknown'}` });
-
-  if (thumbnail) embed.setThumbnail(thumbnail);
+  const embed = buildEmbed({
+    guildId: player.guild,
+    title: '🎶 Now Playing',
+    description: `**${track.title}**\nDuration: \`${track.duration}\`\nVolume: **${player.volume}%**`,
+    thumbnail: getTrackThumbnail(track),
+    url: track.uri || null,
+    footer: `Requester: ${track.requester?.tag || 'Unknown'}`,
+  });
 
   await textChannel.send({ embeds: [embed], components: buildPlayerControls(player) });
 };
@@ -197,12 +215,17 @@ manager
   .on('trackStart', async (player, track) => {
     await sendNowPlayingMessage(player, track);
   })
-  .on('queueEnd', (player) => {
+  .on('queueEnd', async (player) => {
     const textChannel = client.channels.cache.get(player.textChannel);
     const is247 = stay247Guilds.has(player.guild);
 
     if (textChannel) {
-      textChannel.send(is247 ? '🔁 Queue habis. Mode 24/7 aktif, bot tetap stay di voice channel.' : '✅ Queue selesai, bot keluar voice channel.');
+      const embed = buildEmbed({
+        guildId: player.guild,
+        title: is247 ? '🔁 Queue Habis (24/7 ON)' : '✅ Queue Selesai',
+        description: is247 ? 'Mode 24/7 aktif, bot tetap stay di voice channel.' : 'Bot keluar dari voice channel.',
+      });
+      await textChannel.send({ embeds: [embed] });
     }
 
     if (!is247) player.destroy();
@@ -226,16 +249,22 @@ client.on('interactionCreate', async (interaction) => {
 
   const player = manager.players.get(interaction.guildId);
   if (!player) {
-    return interaction.reply({ content: 'Tidak ada player aktif.', ephemeral: true });
+    return sendCommandEmbed(interaction, {
+      title: '⚠️ Player Tidak Aktif',
+      description: 'Tidak ada player aktif.',
+      ephemeral: true,
+    });
   }
 
   try {
     if (interaction.customId === 'music_toggle_pause') {
       player.pause(!player.paused);
-      return interaction.update({
-        content: player.paused ? '⏸️ Musik di-pause.' : '▶️ Musik dilanjutkan.',
-        components: buildPlayerControls(player),
+      const embed = buildEmbed({
+        guildId: interaction.guildId,
+        title: player.paused ? '⏸️ Musik Di-pause' : '▶️ Musik Dilanjutkan',
+        description: `Status terbaru player telah diperbarui.`,
       });
+      return interaction.update({ embeds: [embed], components: buildPlayerControls(player) });
     }
 
     if (interaction.customId === 'music_stop') {
@@ -243,40 +272,47 @@ client.on('interactionCreate', async (interaction) => {
       player.stop();
       stay247Guilds.delete(interaction.guildId);
       player.destroy();
-      return interaction.update({
-        content: '⏹️ Musik dihentikan dan bot keluar dari voice channel.',
-        components: [],
+      const embed = buildEmbed({
+        guildId: interaction.guildId,
+        title: '⏹️ Musik Dihentikan',
+        description: 'Queue dibersihkan dan bot keluar dari voice channel.',
       });
+      return interaction.update({ embeds: [embed], components: [] });
     }
 
     if (interaction.customId === 'music_loop') {
       const enabled = !player.trackRepeat;
       player.setTrackRepeat(enabled);
-      return interaction.reply({
-        content: enabled ? '🔁 Loop lagu aktif.' : '➡️ Loop lagu nonaktif.',
+      return sendCommandEmbed(interaction, {
+        title: '🔁 Loop Track',
+        description: enabled ? 'Loop lagu aktif.' : 'Loop lagu nonaktif.',
         ephemeral: true,
       });
     }
 
     if (interaction.customId === 'music_queue') {
-      const embed = new EmbedBuilder().setTitle('🎶 Music Queue').setDescription(queuePreview(player)).setColor(0x00ae86);
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return sendCommandEmbed(interaction, {
+        title: '🎶 Music Queue',
+        description: queuePreview(player),
+        ephemeral: true,
+      });
     }
 
     if (interaction.customId === 'music_volume') {
       const nextVolume = player.volume >= 150 ? 30 : Math.min(player.volume + 10, 150);
       player.setVolume(nextVolume);
-      return interaction.reply({
-        content: `🔊 Volume di-set ke **${nextVolume}%**.`,
+      return sendCommandEmbed(interaction, {
+        title: '🔊 Volume Diubah',
+        description: `Volume saat ini: **${nextVolume}%**`,
         ephemeral: true,
       });
     }
   } catch (error) {
     console.error(error);
     if (interaction.replied || interaction.deferred) {
-      return interaction.followUp({ content: `❌ Error: ${error.message}`, ephemeral: true });
+      return interaction.followUp({ embeds: [buildEmbed({ guildId: interaction.guildId, title: '❌ Error', description: error.message })], ephemeral: true });
     }
-    return interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+    return sendCommandEmbed(interaction, { title: '❌ Error', description: error.message, ephemeral: true });
   }
 });
 
@@ -288,24 +324,48 @@ client.on('messageCreate', async (message) => {
   const cmd = command?.toLowerCase();
 
   try {
+    if (cmd === 'color') {
+      const hex = args[0];
+      const parsed = parseHexColor(hex);
+      if (!parsed) {
+        return sendCommandEmbed(message, {
+          title: '🎨 Format Warna Salah',
+          description: `Gunakan: ${prefix}color <hex>. Contoh: ${prefix}color #FF8800`,
+        });
+      }
+      guildEmbedColors.set(message.guild.id, parsed);
+      return sendCommandEmbed(message, {
+        title: '🎨 Warna Embed Diubah',
+        description: `Warna embed command di server ini diset ke **${hex.toUpperCase()}**.`,
+        color: parsed,
+      });
+    }
+
     if (cmd === 'ai') {
       const prompt = args.join(' ').trim();
       if (!prompt) {
-        return message.reply(`Gunakan: ${prefix}ai <pertanyaan>`);
+        return sendCommandEmbed(message, {
+          title: '🤖 AI Command',
+          description: `Gunakan: ${prefix}ai <pertanyaan>`,
+        });
       }
 
       const isOwner = ownerIds.has(message.author.id);
       await message.channel.sendTyping();
       const result = await generateGeminiResponse({ prompt, isOwner });
-      const roleText = isOwner ? 'OWNER Persona' : 'MEMBER Persona';
-
-      return message.reply(`🤖 **AI (${roleText})**\n${result.slice(0, 1800)}`);
+      return sendCommandEmbed(message, {
+        title: '🤖 AI Response',
+        description: result.slice(0, 3900),
+      });
     }
 
     if (cmd === 'play' || cmd === 'p') {
       const query = args.join(' ');
       if (!query) {
-        return message.reply(`Gunakan: ${prefix}play <judul lagu / url>`);
+        return sendCommandEmbed(message, {
+          title: '🎵 Play Command',
+          description: `Gunakan: ${prefix}play <judul lagu / url>`,
+        });
       }
 
       const player = await ensurePlayer(message);
@@ -316,143 +376,144 @@ client.on('messageCreate', async (message) => {
 
       if (res.loadType === 'LOAD_FAILED' || res.loadType === 'NO_MATCHES') {
         if (!player.playing && !player.queue.size) player.destroy();
-        return message.reply('Lagu tidak ditemukan dari source Lavalink yang aktif.');
+        return sendCommandEmbed(message, {
+          title: '❌ Lagu Tidak Ditemukan',
+          description: 'Lagu tidak ditemukan dari source Lavalink yang aktif.',
+        });
       }
 
       if (res.loadType === 'PLAYLIST_LOADED') {
         player.queue.add(res.tracks);
         if (!player.playing && !player.paused) player.play();
-        return message.reply(`📚 Playlist dimasukkan: **${res.playlist.name}** (${res.tracks.length} lagu).`);
+        return sendCommandEmbed(message, {
+          title: '📚 Playlist Ditambahkan',
+          description: `**${res.playlist.name}** (${res.tracks.length} lagu) masuk ke queue.`,
+        });
       }
 
       const track = res.tracks[0];
       player.queue.add(track);
       if (!player.playing && !player.paused) player.play();
-      return message.reply(`➕ Added: **${track.title}**`);
+      return sendCommandEmbed(message, {
+        title: '➕ Lagu Ditambahkan',
+        description: `**${track.title}**`,
+      });
     }
 
     if (cmd === 'skip') {
       const player = manager.players.get(message.guild.id);
-      if (!player) return message.reply('Tidak ada player aktif.');
+      if (!player) return sendCommandEmbed(message, { title: '⚠️ Player Tidak Aktif', description: 'Tidak ada player aktif.' });
       player.stop();
-      return message.reply('⏭️ Lagu di-skip.');
+      return sendCommandEmbed(message, { title: '⏭️ Skip', description: 'Lagu di-skip.' });
     }
 
     if (cmd === 'stop') {
       const player = manager.players.get(message.guild.id);
-      if (!player) return message.reply('Tidak ada player aktif.');
+      if (!player) return sendCommandEmbed(message, { title: '⚠️ Player Tidak Aktif', description: 'Tidak ada player aktif.' });
       player.queue.clear();
       player.stop();
-      return message.reply('⏹️ Musik dihentikan dan queue dibersihkan.');
+      return sendCommandEmbed(message, { title: '⏹️ Stop', description: 'Musik dihentikan dan queue dibersihkan.' });
     }
 
     if (cmd === 'pause') {
       const player = manager.players.get(message.guild.id);
-      if (!player) return message.reply('Tidak ada player aktif.');
+      if (!player) return sendCommandEmbed(message, { title: '⚠️ Player Tidak Aktif', description: 'Tidak ada player aktif.' });
       player.pause(true);
-      return message.reply('⏸️ Musik di-pause.');
+      return sendCommandEmbed(message, { title: '⏸️ Pause', description: 'Musik di-pause.' });
     }
 
     if (cmd === 'resume') {
       const player = manager.players.get(message.guild.id);
-      if (!player) return message.reply('Tidak ada player aktif.');
+      if (!player) return sendCommandEmbed(message, { title: '⚠️ Player Tidak Aktif', description: 'Tidak ada player aktif.' });
       player.pause(false);
-      return message.reply('▶️ Musik dilanjutkan.');
+      return sendCommandEmbed(message, { title: '▶️ Resume', description: 'Musik dilanjutkan.' });
     }
 
     if (cmd === 'volume' || cmd === 'vol') {
       const player = manager.players.get(message.guild.id);
-      if (!player) return message.reply('Tidak ada player aktif.');
+      if (!player) return sendCommandEmbed(message, { title: '⚠️ Player Tidak Aktif', description: 'Tidak ada player aktif.' });
 
       const input = Number(args[0]);
       if (!input || Number.isNaN(input) || input < 1 || input > 150) {
-        return message.reply(`Gunakan: ${prefix}volume <1-150>`);
+        return sendCommandEmbed(message, { title: '🔊 Volume', description: `Gunakan: ${prefix}volume <1-150>` });
       }
 
       player.setVolume(input);
-      return message.reply(`🔊 Volume di-set ke **${input}%**.`);
+      return sendCommandEmbed(message, { title: '🔊 Volume Diubah', description: `Volume di-set ke **${input}%**.` });
     }
 
     if (cmd === 'queue' || cmd === 'q') {
       const player = manager.players.get(message.guild.id);
-      const embed = new EmbedBuilder()
-        .setTitle('🎶 Music Queue')
-        .setDescription(queuePreview(player))
-        .setColor(0x00ae86);
-
-      return message.reply({ embeds: [embed] });
+      return sendCommandEmbed(message, { title: '🎶 Music Queue', description: queuePreview(player) });
     }
 
     if (cmd === 'np' || cmd === 'nowplaying') {
       const player = manager.players.get(message.guild.id);
-      if (!player?.queue?.current) return message.reply('Tidak ada lagu yang sedang diputar.');
+      if (!player?.queue?.current) return sendCommandEmbed(message, { title: '🎧 Now Playing', description: 'Tidak ada lagu yang sedang diputar.' });
 
       const track = player.queue.current;
-      const thumbnail = getTrackThumbnail(track);
-      const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
-        .setTitle('🎧 Now Playing')
-        .setDescription(`**${track.title}**\nDuration: \`${track.duration}\`\nVolume: **${player.volume}%**`)
-        .setURL(track.uri || null);
-
-      if (thumbnail) embed.setThumbnail(thumbnail);
-
+      const embed = buildEmbed({
+        guildId: message.guild.id,
+        title: '🎧 Now Playing',
+        description: `**${track.title}**\nDuration: \`${track.duration}\`\nVolume: **${player.volume}%**`,
+        thumbnail: getTrackThumbnail(track),
+        url: track.uri || null,
+      });
       return message.reply({ embeds: [embed], components: buildPlayerControls(player) });
     }
 
     if (cmd === '247') {
       const player = manager.players.get(message.guild.id);
       if (!player) {
-        return message.reply('Belum ada player aktif. Jalankan play dulu lalu toggle 24/7.');
+        return sendCommandEmbed(message, { title: '🕒 24/7', description: 'Belum ada player aktif. Jalankan play dulu lalu toggle 24/7.' });
       }
 
       const isEnabled = stay247Guilds.has(message.guild.id);
       if (isEnabled) {
         stay247Guilds.delete(message.guild.id);
-        return message.reply('🛌 Mode 24/7 **OFF**. Bot akan keluar setelah queue habis.');
+        return sendCommandEmbed(message, { title: '🛌 24/7 OFF', description: 'Bot akan keluar setelah queue habis.' });
       }
 
       stay247Guilds.add(message.guild.id);
-      return message.reply('🟢 Mode 24/7 **ON**. Bot tetap stay di voice channel saat queue habis.');
+      return sendCommandEmbed(message, { title: '🟢 24/7 ON', description: 'Bot tetap stay di voice channel saat queue habis.' });
     }
 
     if (cmd === 'leave' || cmd === 'disconnect') {
       const player = manager.players.get(message.guild.id);
-      if (!player) return message.reply('Bot tidak sedang berada di voice channel.');
+      if (!player) return sendCommandEmbed(message, { title: '👋 Leave', description: 'Bot tidak sedang berada di voice channel.' });
 
       stay247Guilds.delete(message.guild.id);
       player.destroy();
-      return message.reply('👋 Bot keluar dari voice channel.');
+      return sendCommandEmbed(message, { title: '👋 Leave', description: 'Bot keluar dari voice channel.' });
     }
 
     if (cmd === 'ping') {
-      return message.reply(`🏓 Pong! ${client.ws.ping}ms`);
+      return sendCommandEmbed(message, { title: '🏓 Pong', description: `${client.ws.ping}ms` });
     }
 
     if (cmd === 'help') {
-      const embed = new EmbedBuilder()
-        .setTitle('📘 Basic Music + AI Commands (Lavalink + Buttons)')
-        .setColor(0x5865f2)
-        .setDescription([
-          `\`${prefix}play <judul/url>\` - Play lagu dari source Lavalink`,
-          `\`${prefix}skip\` - Skip lagu sekarang`,
-          `\`${prefix}stop\` - Stop dan clear queue`,
-          `\`${prefix}pause\` - Pause lagu`,
-          `\`${prefix}resume\` - Lanjutkan lagu`,
-          `\`${prefix}volume <1-150>\` - Atur volume`,
-          `\`${prefix}queue\` - Lihat queue`,
-          `\`${prefix}nowplaying\` - Lihat lagu aktif + thumbnail + tombol`,
-          `\`${prefix}247\` - Toggle mode 24/7`,
-          `\`${prefix}leave\` - Bot keluar VC`,
-          `\`${prefix}ai <pertanyaan>\` - Chat AI (Gemini 2.5 Flash, persona owner/member)`,
-          `\`${prefix}ping\` - Cek latency bot`,
-        ].join('\n'));
-
-      return message.reply({ embeds: [embed] });
+      return sendCommandEmbed(message, {
+        title: '📘 Commands',
+        description: [
+          `\`${prefix}play <judul/url>\``,
+          `\`${prefix}skip\``,
+          `\`${prefix}stop\``,
+          `\`${prefix}pause\``,
+          `\`${prefix}resume\``,
+          `\`${prefix}volume <1-150>\``,
+          `\`${prefix}queue\``,
+          `\`${prefix}nowplaying\``,
+          `\`${prefix}247\``,
+          `\`${prefix}leave\``,
+          `\`${prefix}ai <pertanyaan>\``,
+          `\`${prefix}color <hex>\``,
+          `\`${prefix}ping\``,
+        ].join('\n'),
+      });
     }
   } catch (error) {
     console.error(error);
-    return message.reply(`❌ Error: ${error.message || 'Terjadi kesalahan saat menjalankan command.'}`);
+    return sendCommandEmbed(message, { title: '❌ Error', description: error.message || 'Terjadi kesalahan saat menjalankan command.' });
   }
 });
 
