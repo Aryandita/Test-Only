@@ -1,130 +1,164 @@
 import { EmbedBuilder, MessageFlags } from 'discord.js';
-import { createNowPlayingComponents, formatQueue } from '../utils/music-ui.js';
+import { createAIResponseComponents, createNowPlayingComponents, formatQueue } from '../utils/music-ui.js';
 
-function ownerOnly(interaction, ownerId) {
-  return interaction.user.id === ownerId;
+function ownerOnly(userId, ownerId) {
+  return userId === ownerId;
 }
 
-export async function handleCommand(interaction, context) {
+export async function executeBotCommand({
+  command,
+  options = {},
+  userId,
+  member,
+  guild,
+  guildId,
+  channelId,
+  client,
+  respond,
+  context
+}) {
   const { musicManager, aiService, env, registerCommands } = context;
 
-  switch (interaction.commandName) {
+  switch (command) {
     case 'play': {
-      const query = interaction.options.getString('query', true);
-      const voiceChannel = interaction.member.voice.channel;
-
-      if (!voiceChannel) {
-        await interaction.reply({ content: 'Kamu harus masuk voice channel dulu.', ephemeral: true });
+      const query = options.query;
+      if (!query?.trim()) {
+        await respond({ content: '⚠️ Masukkan query lagu. Contoh: `/play query:night dancer` atau `!play night dancer`.' });
         return;
       }
+      const voiceChannel = member?.voice?.channel;
 
-      await interaction.deferReply();
+      if (!voiceChannel) {
+        await respond({ content: '⚠️ Kamu harus masuk voice channel dulu.' });
+        return;
+      }
 
       const track = await musicManager.search(query);
       if (!track) {
-        await interaction.editReply('Lagu tidak ditemukan. Coba keyword lain.');
+        await respond({ content: '❌ Lagu tidak ditemukan. Coba keyword lain ya.' });
         return;
       }
 
-      if (!musicManager.shoukaku.players.has(interaction.guildId)) {
-        await musicManager.join({
-          guildId: interaction.guildId,
-          voiceChannelId: voiceChannel.id,
-          shardId: interaction.guild.shardId
-        });
+      if (!musicManager.shoukaku.players.has(guildId)) {
+        await musicManager.join({ guildId, voiceChannelId: voiceChannel.id, shardId: guild.shardId });
       }
 
-      const queue = await musicManager.enqueue({
-        guildId: interaction.guildId,
-        track,
-        textChannelId: interaction.channelId
-      });
-
-      await interaction.editReply(createNowPlayingComponents(queue.current ?? track, queue.loop));
+      const queue = await musicManager.enqueue({ guildId, track, textChannelId: channelId });
+      await respond(createNowPlayingComponents(queue.current ?? track, queue.loop, env.musicEmbedColor));
       return;
     }
 
     case 'skip': {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const track = await musicManager.skip(interaction.guildId);
-      await interaction.editReply(track ? `Skip berhasil. Lanjut: **${track.info.title}**` : 'Antrian habis.');
+      const track = await musicManager.skip(guildId);
+      await respond({ content: track ? `⏭️ Skip berhasil. Lanjut: **${track.info.title}**` : '📭 Antrian habis.' });
       return;
     }
 
     case 'stop': {
-      await musicManager.stop(interaction.guildId);
-      await interaction.reply({ content: 'Musik dihentikan dan bot keluar dari voice channel.' });
+      await musicManager.stop(guildId);
+      await respond({ content: '⏹️ Musik dihentikan dan bot keluar dari voice channel.' });
       return;
     }
 
     case 'queue': {
-      const queue = musicManager.getQueue(interaction.guildId);
+      const queue = musicManager.getQueue(guildId);
       const embed = new EmbedBuilder()
-        .setColor(0x2b2d31)
-        .setTitle('📜 Queue')
+        .setColor(env.musicEmbedColor)
+        .setTitle('📜 Daftar Antrian Musik')
         .setDescription(formatQueue(queue));
-
-      await interaction.reply({ embeds: [embed] });
+      await respond({ embeds: [embed] });
       return;
     }
 
     case 'loop': {
-      const enabled = musicManager.toggleLoop(interaction.guildId);
-      await interaction.reply({ content: `Loop sekarang: **${enabled ? 'Aktif' : 'Mati'}**` });
+      const enabled = musicManager.toggleLoop(guildId);
+      await respond({ content: `🔁 Loop sekarang: **${enabled ? 'Aktif' : 'Mati'}**` });
       return;
     }
 
     case 'ai': {
-      const prompt = interaction.options.getString('prompt', true);
-      await interaction.deferReply();
-      const answer = await aiService.ask({ userId: interaction.user.id, prompt });
-      await interaction.editReply(`🤖 ${answer.slice(0, 1900)}`);
+      const prompt = options.prompt;
+      if (!prompt?.trim()) {
+        await respond({ content: '⚠️ Prompt AI tidak boleh kosong. Contoh: `!ai kasih ide event server`.' });
+        return;
+      }
+      const answer = await aiService.ask({ userId, prompt });
+      await respond(
+        createAIResponseComponents({
+          prompt,
+          answer,
+          isOwner: ownerOnly(userId, env.ownerId),
+          color: env.aiEmbedColor
+        })
+      );
       return;
     }
 
     case 'restart': {
-      if (!ownerOnly(interaction, env.ownerId)) {
-        await interaction.reply({ content: 'Command ini hanya untuk owner.', ephemeral: true });
+      if (!ownerOnly(userId, env.ownerId)) {
+        await respond({ content: '🚫 Command ini hanya untuk owner.' });
         return;
       }
-
-      await interaction.reply('Bot akan restart sekarang...');
+      await respond({ content: '♻️ Bot akan restart sekarang...' });
       setTimeout(() => process.exit(0), 1_000);
       return;
     }
 
     case 'owner-stats': {
-      if (!ownerOnly(interaction, env.ownerId)) {
-        await interaction.reply({ content: 'Command ini hanya untuk owner.', ephemeral: true });
+      if (!ownerOnly(userId, env.ownerId)) {
+        await respond({ content: '🚫 Command ini hanya untuk owner.' });
         return;
       }
 
       const embed = new EmbedBuilder()
         .setColor(0xf1c40f)
-        .setTitle('Owner Stats')
+        .setTitle('🛠️ Owner Stats')
         .addFields(
-          { name: 'Guild', value: `${interaction.client.guilds.cache.size}`, inline: true },
-          { name: 'Ping', value: `${interaction.client.ws.ping} ms`, inline: true },
-          { name: 'Uptime', value: `${Math.floor(process.uptime())} detik`, inline: true }
+          { name: '🏠 Guild', value: `${client.guilds.cache.size}`, inline: true },
+          { name: '📶 Ping', value: `${client.ws.ping} ms`, inline: true },
+          { name: '⏳ Uptime', value: `${Math.floor(process.uptime())} detik`, inline: true }
         );
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await respond({ embeds: [embed] });
       return;
     }
 
     case 'owner-sync': {
-      if (!ownerOnly(interaction, env.ownerId)) {
-        await interaction.reply({ content: 'Command ini hanya untuk owner.', ephemeral: true });
+      if (!ownerOnly(userId, env.ownerId)) {
+        await respond({ content: '🚫 Command ini hanya untuk owner.' });
         return;
       }
-
-      await interaction.deferReply({ ephemeral: true });
       const count = await registerCommands();
-      await interaction.editReply(`Sinkronisasi selesai. Total command: ${count}.`);
+      await respond({ content: `✅ Sinkronisasi selesai. Total command: **${count}**.` });
       return;
     }
 
     default:
-      await interaction.reply({ content: 'Command belum tersedia.', ephemeral: true });
+      await respond({ content: '❓ Command belum tersedia.' });
   }
+}
+
+export async function handleCommand(interaction, context) {
+  const ephemeralCommands = new Set(['skip', 'owner-stats', 'owner-sync']);
+  if (ephemeralCommands.has(interaction.commandName)) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } else {
+    await interaction.deferReply();
+  }
+
+  await executeBotCommand({
+    command: interaction.commandName,
+    options: {
+      query: interaction.options.getString('query'),
+      prompt: interaction.options.getString('prompt')
+    },
+    userId: interaction.user.id,
+    member: interaction.member,
+    guild: interaction.guild,
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+    client: interaction.client,
+    respond: (payload) => interaction.editReply(payload),
+    context
+  });
 }

@@ -13,7 +13,6 @@ export class MusicManager {
       }
     ];
 
-    this.client = client;
     this.shoukaku = new Shoukaku(new Connectors.DiscordJS(client), nodes, {
       moveOnDisconnect: false,
       moveOnDestroy: false,
@@ -24,11 +23,15 @@ export class MusicManager {
     });
 
     this.shoukaku.on('ready', (name) => {
-      console.log(`[Lavalink] Node ready: ${name}`);
+      console.log(`🟢 Lavalink node **${name}** berhasil terhubung! Musik siap diputar 🎶`);
     });
 
     this.shoukaku.on('error', (name, error) => {
-      console.error(`[Lavalink] Node error (${name}):`, error);
+      console.error(`🔴 Lavalink node **${name}** gagal/bermasalah:`, error);
+    });
+
+    this.shoukaku.on('close', (name, code, reason) => {
+      console.warn(`🟠 Lavalink node **${name}** terputus (${code}) - ${reason ?? 'tanpa alasan'}`);
     });
   }
 
@@ -55,15 +58,29 @@ export class MusicManager {
   }
 
   async search(query) {
+    if (!query?.trim()) return null;
     const node = this.shoukaku.nodes.get('main') ?? [...this.shoukaku.nodes.values()][0];
     if (!node) throw new Error('Lavalink node belum siap.');
-    const result = await node.rest.resolve(query.startsWith('http') ? query : `ytsearch:${query}`);
 
-    if (result.loadType === 'empty' || !result.data?.length) {
-      return null;
+    const result = await node.rest.resolve(query.startsWith('http') ? query : `ytsearch:${query}`);
+    const tracks = this.normalizeTracks(result);
+
+    return tracks[0] ?? null;
+  }
+
+  normalizeTracks(result) {
+    if (!result || result.loadType === 'empty') return [];
+    if (Array.isArray(result.data)) return result.data;
+
+    if (result.loadType === 'track' && result.data) {
+      return [result.data];
     }
 
-    return result.data[0];
+    if (result.loadType === 'playlist' && Array.isArray(result.data?.tracks)) {
+      return result.data.tracks;
+    }
+
+    return [];
   }
 
   async enqueue({ guildId, track, textChannelId }) {
@@ -96,8 +113,13 @@ export class MusicManager {
       return null;
     }
 
+    const encoded = nextTrack.encoded ?? nextTrack.track;
+    if (!encoded) {
+      throw new Error('Track tidak memiliki encoded data (penyebab umum Bad Request Lavalink).');
+    }
+
     queue.current = nextTrack;
-    await player.playTrack({ track: nextTrack.encoded });
+    await player.playTrack({ track: encoded });
     return nextTrack;
   }
 

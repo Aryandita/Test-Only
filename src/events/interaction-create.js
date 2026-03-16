@@ -5,6 +5,7 @@ export function registerInteractionHandler(client, context) {
     try {
       if (interaction.isChatInputCommand()) {
         await handleCommand(interaction, context);
+        console.log(`✅ Slash command /${interaction.commandName} sukses oleh ${interaction.user.tag}`);
         return;
       }
 
@@ -16,10 +17,10 @@ export function registerInteractionHandler(client, context) {
           case 'music:skip': {
             const track = await musicManager.skip(interaction.guildId);
             await interaction.reply({
-              content: track ? `⏭️ Skip ke **${track.info.title}**` : 'Antrian habis.',
+              content: track ? `⏭️ Skip ke **${track.info.title}**` : '📭 Antrian habis.',
               ephemeral: true
             });
-            return;
+            break;
           }
 
           case 'music:loop': {
@@ -28,21 +29,23 @@ export function registerInteractionHandler(client, context) {
               content: `🔁 Loop sekarang: **${enabled ? 'Aktif' : 'Mati'}**`,
               ephemeral: true
             });
-            return;
+            break;
           }
 
           case 'music:stop': {
             await musicManager.stop(interaction.guildId);
             await interaction.reply({ content: '⏹️ Musik dihentikan.', ephemeral: true });
-            return;
+            break;
           }
 
           default:
             break;
         }
+
+        console.log(`🎛️ Tombol ${interaction.customId} dijalankan oleh ${interaction.user.tag}`);
       }
     } catch (error) {
-      console.error('[Interaction Error]', error);
+      console.error(`❌ [Interaction Error] ${interaction.type} gagal:`, error);
       const payload = { content: `Terjadi error: ${error.message}`, ephemeral: true };
 
       if (interaction.deferred || interaction.replied) {

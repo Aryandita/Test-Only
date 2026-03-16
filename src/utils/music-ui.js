@@ -10,34 +10,57 @@ import {
   TextDisplayBuilder
 } from 'discord.js';
 
-export function createNowPlayingComponents(track, loopEnabled) {
+export function createNowPlayingComponents(track, loopEnabled, color) {
   const embed = new EmbedBuilder()
-    .setColor(0x5865f2)
-    .setTitle('🎵 Now Playing')
-    .setDescription(`**${track.info.title}**\nby ${track.info.author}`)
+    .setColor(color)
+    .setTitle('🎵 Sedang Diputar Sekarang')
+    .setDescription(`**${track.info.title}**\n👤 ${track.info.author}`)
     .addFields(
-      { name: 'Durasi', value: formatMs(track.info.length), inline: true },
-      { name: 'Loop', value: loopEnabled ? 'Aktif' : 'Mati', inline: true }
+      { name: '⏱️ Durasi', value: formatMs(track.info.length), inline: true },
+      { name: '🔁 Loop', value: loopEnabled ? 'Aktif' : 'Mati', inline: true }
     );
 
   const controls = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('music:skip').setLabel('Skip').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('music:loop').setLabel('Loop').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('music:stop').setLabel('Stop').setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId('music:skip').setLabel('⏭️ Skip').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('music:loop').setLabel('🔁 Loop').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('music:stop').setLabel('⏹️ Stop').setStyle(ButtonStyle.Danger)
   );
 
   const container = new ContainerBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent('## Kontrol Music (Components V2)')
-    )
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('## 🎧 Kontrol Musik (Components V2)'))
     .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
     .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`Sekarang memutar: **${track.info.title}**`)
+      new TextDisplayBuilder().setContent(`Sedang memutar: **${track.info.title}**`)
     );
 
   return {
     embeds: [embed],
     components: [controls, container],
+    flags: MessageFlags.IsComponentsV2
+  };
+}
+
+export function createAIResponseComponents({ prompt, answer, isOwner, color }) {
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(isOwner ? '🧠 AI Owner Assistant' : '🤖 AI Member Assistant')
+    .addFields(
+      { name: '❓ Prompt', value: trimText(prompt, 1024) },
+      { name: '💬 Jawaban', value: trimText(answer, 1024) }
+    );
+
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent('## ✨ Respon Gemini 2.5 Flash'))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        isOwner ? 'Mode persona: **Owner (detail + operasional)**' : 'Mode persona: **Member (ringkas + ramah)**'
+      )
+    );
+
+  return {
+    embeds: [embed],
+    components: [container],
     flags: MessageFlags.IsComponentsV2
   };
 }
@@ -63,4 +86,9 @@ function formatMs(ms) {
   const seconds = (totalSeconds % 60).toString().padStart(2, '0');
 
   return `${minutes}:${seconds}`;
+}
+
+function trimText(text, max) {
+  if (!text) return '-';
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 }
