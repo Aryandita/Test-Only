@@ -15,6 +15,14 @@ const token = process.env.DISCORD_TOKEN;
 const prefix = process.env.PREFIX || '!';
 const stay247Default = process.env.STAY_24_7 === 'true';
 const defaultSearchSource = process.env.DEFAULT_SEARCH_SOURCE || 'ytsearch';
+const geminiApiKey = process.env.GEMINI_API_KEY;
+const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const ownerIds = new Set(
+  (process.env.OWNER_IDS || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean),
+);
 
 if (!token) {
   throw new Error('DISCORD_TOKEN belum di-set. Isi file .env terlebih dahulu.');
@@ -46,6 +54,56 @@ const manager = new Manager({
     if (guild) guild.shard.send(payload);
   },
 });
+
+const OWNER_PERSONA = [
+  'Kamu adalah asisten AI khusus untuk OWNER bot Discord.',
+  'Gaya bahasa: ringkas, teknis, to-the-point, boleh memberi saran konfigurasi production-grade.',
+  'Fokus: debugging, arsitektur bot/music, keamanan token, performa Lavalink.',
+].join(' ');
+
+const MEMBER_PERSONA = [
+  'Kamu adalah asisten AI ramah untuk member server Discord.',
+  'Gaya bahasa: santai, jelas, tidak terlalu teknis, berikan langkah sederhana.',
+  'Fokus: membantu penggunaan command bot, rekomendasi lagu, dan troubleshooting ringan.',
+].join(' ');
+
+const generateGeminiResponse = async ({ prompt, isOwner }) => {
+  if (!geminiApiKey) {
+    throw new Error('GEMINI_API_KEY belum di-set.');
+  }
+
+  const systemInstruction = isOwner ? OWNER_PERSONA : MEMBER_PERSONA;
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemInstruction }],
+        },
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }],
+          },
+        ],
+      }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Gemini API error (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text).filter(Boolean).join('\n');
+  if (!text) throw new Error('Gemini tidak mengembalikan jawaban teks.');
+
+  return text;
+};
 
 const ensurePlayer = async (message) => {
   const voiceChannel = message.member?.voice?.channel;
@@ -221,6 +279,20 @@ client.on('messageCreate', async (message) => {
   const cmd = command?.toLowerCase();
 
   try {
+    if (cmd === 'ai') {
+      const prompt = args.join(' ').trim();
+      if (!prompt) {
+        return message.reply(`Gunakan: ${prefix}ai <pertanyaan>`);
+      }
+
+      const isOwner = ownerIds.has(message.author.id);
+      await message.channel.sendTyping();
+      const result = await generateGeminiResponse({ prompt, isOwner });
+      const roleText = isOwner ? 'OWNER Persona' : 'MEMBER Persona';
+
+      return message.reply(`🤖 **AI (${roleText})**\n${result.slice(0, 1800)}`);
+    }
+
     if (cmd === 'play' || cmd === 'p') {
       const query = args.join(' ');
       if (!query) {
@@ -350,7 +422,7 @@ client.on('messageCreate', async (message) => {
 
     if (cmd === 'help') {
       const embed = new EmbedBuilder()
-        .setTitle('📘 Basic Music Commands (Lavalink + Button Controls)')
+        .setTitle('📘 Basic Music + AI Commands (Lavalink + Buttons)')
         .setColor(0x5865f2)
         .setDescription([
           `\`${prefix}play <judul/url>\` - Play lagu dari source Lavalink`,
@@ -363,6 +435,7 @@ client.on('messageCreate', async (message) => {
           `\`${prefix}nowplaying\` - Lihat lagu aktif + thumbnail + tombol`,
           `\`${prefix}247\` - Toggle mode 24/7`,
           `\`${prefix}leave\` - Bot keluar VC`,
+          `\`${prefix}ai <pertanyaan>\` - Chat AI (Gemini 2.5 Flash, persona owner/member)`,
           `\`${prefix}ping\` - Cek latency bot`,
         ].join('\n'));
 

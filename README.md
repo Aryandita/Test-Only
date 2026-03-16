@@ -1,63 +1,63 @@
-# Discord Music Bot (Basic + Lavalink)
+# Discord Music Bot (Lavalink v4 + D.A.V.E + Gemini AI)
 
-Template basic untuk music bot Discord dengan command umum seperti **24/7**, **play**, dan command playback lain, menggunakan **Lavalink** sebagai audio backend.
+Template music bot Discord dengan:
+- Lavalink **v4 terbaru** (D.A.V.E ready)
+- Multi-source playback (YouTube/SoundCloud/Spotify/Deezer/Apple Music via plugin)
+- Tombol kontrol musik (pause/play, stop, loop, queue, volume)
+- AI command memakai **Gemini 2.5 Flash** dengan persona terpisah untuk owner & member.
 
 ## 1) Setup Environment
 
 1. Install Node.js (minimal versi 18).
-2. Clone project ini.
-3. Install dependency:
+2. Install dependency:
 
 ```bash
 npm install
 ```
 
-4. Copy file environment:
+3. Copy file environment:
 
 ```bash
 cp .env.example .env
 ```
 
-5. Isi `.env`:
+4. Isi `.env`:
 
 ```env
 DISCORD_TOKEN=isi_token_discord_bot
 PREFIX=!
 STAY_24_7=false
+OWNER_IDS=123456789012345678,987654321098765432
 
 LAVALINK_HOST=127.0.0.1
 LAVALINK_PORT=2333
 LAVALINK_PASSWORD=youshallnotpass
 LAVALINK_SECURE=false
 DEFAULT_SEARCH_SOURCE=ytsearch
+
+GEMINI_API_KEY=isi_gemini_api_key
+GEMINI_MODEL=gemini-2.5-flash
 ```
 
-Keterangan variabel:
-- `DISCORD_TOKEN`: token bot dari Discord Developer Portal.
-- `PREFIX`: awalan command (contoh `!play`).
-- `STAY_24_7`: default mode 24/7 saat bot start (`true` atau `false`).
-- `LAVALINK_HOST`: host Lavalink server.
-- `LAVALINK_PORT`: port Lavalink server.
-- `LAVALINK_PASSWORD`: password Lavalink server.
-- `LAVALINK_SECURE`: `true` jika Lavalink pakai SSL.
-- `DEFAULT_SEARCH_SOURCE`: source default untuk text query (`ytsearch`, `scsearch`, dll).
+Keterangan penting:
+- `OWNER_IDS`: daftar user ID Discord owner (dipisahkan koma) untuk persona AI owner.
+- `GEMINI_MODEL`: default `gemini-2.5-flash`.
 
-## 2) Setup Lavalink (bentuk/config)
+## 2) Setup Lavalink Terbaru (D.A.V.E ready)
 
-Project ini menyertakan contoh konfigurasi di:
-
+Gunakan file contoh:
 - `lavalink/application.yml.example`
 
-Salin menjadi `application.yml`, lalu jalankan Lavalink server menggunakan file itu.
+Lalu jalankan Lavalink v4 terbaru (disarankan Java 21+). Contoh image:
+- `ghcr.io/lavalink-devs/lavalink:4`
 
 ### Multi-source playback
 
-Agar bot bisa memutar dari beberapa sumber (contoh YouTube search, SoundCloud, Spotify/Deezer/Apple Music), gunakan plugin Lavalink seperti:
+Konfigurasi contoh sudah memuat plugin:
+- `dev.lavalink.youtube:youtube-plugin`
+- `com.github.topi314.lavasrc:lavasrc-plugin`
 
-- `youtube-source`
-- `lavasrc-plugin`
-
-> Catatan: dukungan source tergantung plugin yang kamu aktifkan di Lavalink server.
+Dengan plugin di atas, kamu bisa pakai banyak sumber (tergantung konfigurasi provider plugin).
 
 ## 3) Menjalankan Bot
 
@@ -65,46 +65,48 @@ Agar bot bisa memutar dari beberapa sumber (contoh YouTube search, SoundCloud, S
 npm start
 ```
 
-## 4) Command Basic Music Bot
+## 4) Command Music
 
-- `!play <judul/url>`: Memutar lagu dari query atau URL (via Lavalink).
-- `!skip`: Skip lagu yang sedang diputar.
-- `!stop`: Stop playback dan bersihkan queue.
-- `!pause`: Pause lagu saat ini.
-- `!resume`: Lanjutkan lagu.
-- `!volume <1-150>`: Atur volume.
-- `!queue` atau `!q`: Menampilkan antrean lagu.
-- `!nowplaying` atau `!np`: Menampilkan lagu yang sedang diputar (+ thumbnail jika tersedia).
-- `!247`: Toggle mode 24/7 (bot stay setelah queue habis).
-- `!leave`: Bot keluar dari voice channel.
-- `!ping`: Menampilkan latency bot.
-- `!help`: Menampilkan semua command.
+- `!play <judul/url>`
+- `!skip`
+- `!stop`
+- `!pause`
+- `!resume`
+- `!volume <1-150>`
+- `!queue`
+- `!nowplaying`
+- `!247`
+- `!leave`
+- `!ping`
 
-> Jika prefix diubah di `.env`, maka semua command menyesuaikan.
+### Tombol kontrol saat now playing
 
-## 5) Tombol Kontrol Musik
+- Pause/Play
+- Stop
+- Loop
+- Queue
+- Volume +10
 
-Saat lagu diputar, bot mengirim embed **Now Playing** dengan tombol:
-- **Pause/Play**
-- **Stop**
-- **Loop** (track repeat)
-- **Queue**
-- **Volume +10**
+Now playing juga menampilkan thumbnail (jika metadata tersedia / fallback YouTube).
 
-Embed now playing juga akan menampilkan thumbnail lagu bila metadata source menyediakan URL thumbnail.
+## 5) Command AI (Gemini)
 
-## 6) Permission Bot yang Dibutuhkan
+- `!ai <pertanyaan>`
 
-Pastikan bot punya permission berikut:
+Sistem persona:
+- **Owner Persona**: aktif jika user ID ada di `OWNER_IDS` (jawaban lebih teknis & operasional bot).
+- **Member Persona**: default untuk user biasa (jawaban lebih ramah & sederhana).
+
+## 6) Permission Bot
+
+Pastikan bot punya permission:
 - `View Channels`
 - `Send Messages`
 - `Read Message History`
 - `Connect`
 - `Speak`
 
-## 7) Validasi Cepat
-
-Jalankan pengecekan syntax:
+## 7) Validasi cepat
 
 ```bash
 npm run check
