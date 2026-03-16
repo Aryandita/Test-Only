@@ -9,7 +9,10 @@ Template music bot Discord dengan:
 
 ## Setup
 
+Gunakan **Node.js 24** (LTS terbaru) agar environment konsisten dengan project ini.
+
 ```bash
+nvm use 24
 npm install
 cp .env.example .env
 npm start
@@ -18,6 +21,7 @@ npm start
 Isi `.env`:
 
 ```env
+NODE_ENV=production
 DISCORD_TOKEN=isi_token_discord_bot
 PREFIX=!
 STAY_24_7=false
@@ -90,3 +94,12 @@ Pastikan env ini aktif:
 - `LAVALINK_USE_VERSION_PATH=true`
 
 Konfigurasi tersebut membuat client memakai path websocket versi Lavalink v4.
+
+
+## Node Version Files
+
+Project ini menyertakan:
+- `.nvmrc` -> `24`
+- `.node-version` -> `24`
+
+Agar tooling seperti nvm/asdf/volta bisa otomatis menyesuaikan runtime.
