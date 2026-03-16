@@ -1,0 +1,47 @@
+server:
+  port: 2333
+
+lavalink:
+  server:
+    password: "youshallnotpass"
+    sources:
+      youtube: false
+      soundcloud: true
+      bandcamp: true
+      vimeo: true
+      twitch: true
+      http: true
+      local: false
+    youtubeConfig:
+      email: ""
+      password: ""
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    playerUpdateInterval: 5
+    youtubePlaylistLoadLimit: 6
+    httpConfig:
+      proxyHost: ""
+      proxyPort: 0
+      proxyUser: ""
+      proxyPassword: ""
+
+# Agar bisa multi-source modern (YouTube search, Spotify, Deezer, Apple Music, dst),
+# biasanya dipakai plugin seperti:
+# - lavasrc-plugin
+# - youtube-source
+# Plugin dapat ditambahkan melalui folder plugins/ atau image Lavalink yang sudah include plugin.

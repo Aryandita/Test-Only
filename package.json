@@ -1,0 +1,19 @@
+{
+  "name": "discord-music-bot-lavalink-basic",
+  "version": "1.1.0",
+  "description": "Basic Discord music bot with Lavalink support and common commands",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.3",
+    "dotenv": "^16.4.5",
+    "erela.js": "^2.4.0"
+  }
+}
