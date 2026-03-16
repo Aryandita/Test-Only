@@ -1,0 +1,22 @@
+{
+  "name": "discord-music-ai-bot",
+  "version": "1.0.0",
+  "description": "Discord music bot (Node.js 24 + Lavalink 4.2.2) with Gemini 2.5 Flash AI and owner/member persona split",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "check": "node --check src/index.js"
+  },
+  "dependencies": {
+    "@discordjs/voice": "^0.18.0",
+    "@google/genai": "^0.14.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.7",
+    "shoukaku": "^4.1.0"
+  }
+}
