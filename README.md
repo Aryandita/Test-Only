@@ -29,10 +29,16 @@ PREFIX=!
 STAY_24_7=false
 OWNER_IDS=123456789012345678,987654321098765432
 
-LAVALINK_HOST=127.0.0.1
-LAVALINK_PORT=2333
-LAVALINK_PASSWORD=youshallnotpass
+LAVALINK_HOST=hyperion.kythia.xyz
+LAVALINK_PORT=3010
+LAVALINK_PASSWORD=dsc.gg/kythia
 LAVALINK_SECURE=false
+
+LAVALINK_HOSTS=hyperion.kythia.xyz
+LAVALINK_PORTS=3010
+LAVALINK_PASSWORDS=dsc.gg/kythia
+LAVALINK_SECURES=false
+
 DEFAULT_SEARCH_SOURCE=ytsearch
 
 GEMINI_API_KEY=isi_gemini_api_key
@@ -41,6 +47,8 @@ GEMINI_MODEL=gemini-2.5-flash
 
 Keterangan penting:
 - `OWNER_IDS`: daftar user ID Discord owner (dipisahkan koma) untuk persona AI owner.
+- `LAVALINK_HOSTS/PORTS/PASSWORDS/SECURES`: format multi-node (dipisahkan koma), prioritas utama untuk koneksi Lavalink.
+- `LAVALINK_HOST/PORT/PASSWORD/SECURE`: fallback legacy single node.
 - `GEMINI_MODEL`: default `gemini-2.5-flash`.
 
 ## 2) Setup Lavalink Terbaru (D.A.V.E ready)

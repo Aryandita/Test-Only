@@ -17,12 +17,27 @@ const stay247Default = process.env.STAY_24_7 === 'true';
 const defaultSearchSource = process.env.DEFAULT_SEARCH_SOURCE || 'ytsearch';
 const geminiApiKey = process.env.GEMINI_API_KEY;
 const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const ownerIds = new Set(
-  (process.env.OWNER_IDS || '')
+const parseList = (value) =>
+  (value || '')
     .split(',')
-    .map((id) => id.trim())
-    .filter(Boolean),
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const lavalinkHosts = parseList(process.env.LAVALINK_HOSTS || process.env.LAVALINK_HOST || 'hyperion.kythia.xyz');
+const lavalinkPorts = parseList(process.env.LAVALINK_PORTS || process.env.LAVALINK_PORT || '3010');
+const lavalinkPasswords = parseList(process.env.LAVALINK_PASSWORDS || process.env.LAVALINK_PASSWORD || 'dsc.gg/kythia');
+const lavalinkSecures = parseList(process.env.LAVALINK_SECURES || process.env.LAVALINK_SECURE || 'false');
+const ownerIds = new Set(
+  parseList(process.env.OWNER_IDS),
 );
+
+const lavalinkNodes = lavalinkHosts.map((host, index) => ({
+  identifier: `node-${index + 1}`,
+  host,
+  port: Number(lavalinkPorts[index] || lavalinkPorts[0] || 3010),
+  password: lavalinkPasswords[index] || lavalinkPasswords[0] || 'dsc.gg/kythia',
+  secure: (lavalinkSecures[index] || lavalinkSecures[0] || 'false') === 'true',
+}));
 
 if (!token) {
   throw new Error('DISCORD_TOKEN belum di-set. Isi file .env terlebih dahulu.');
@@ -41,14 +56,7 @@ const client = new Client({
 const stay247Guilds = new Set();
 
 const manager = new Manager({
-  nodes: [
-    {
-      host: process.env.LAVALINK_HOST || '127.0.0.1',
-      port: Number(process.env.LAVALINK_PORT || 2333),
-      password: process.env.LAVALINK_PASSWORD || 'youshallnotpass',
-      secure: process.env.LAVALINK_SECURE === 'true',
-    },
-  ],
+  nodes: lavalinkNodes,
   send(id, payload) {
     const guild = client.guilds.cache.get(id);
     if (guild) guild.shard.send(payload);
@@ -202,6 +210,7 @@ manager
 
 client.once('ready', () => {
   console.log(`✅ Bot online sebagai ${client.user.tag}`);
+  console.log(`ℹ️ Lavalink nodes configured: ${lavalinkNodes.map((n) => `${n.host}:${n.port}`).join(', ')}`);
   manager.init(client.user.id);
 
   if (stay247Default) {
