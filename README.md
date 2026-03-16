@@ -36,6 +36,8 @@ LAVALINK_HOSTS=hyperion.kythia.xyz
 LAVALINK_PORTS=3010
 LAVALINK_PASSWORDS=dsc.gg/kythia
 LAVALINK_SECURES=false
+LAVALINK_VERSION=v4
+LAVALINK_USE_VERSION_PATH=true
 
 DEFAULT_SEARCH_SOURCE=ytsearch
 
@@ -58,6 +60,7 @@ GEMINI_MODEL=gemini-2.5-flash
 - `!ping`
 - `!color <hex>` (contoh: `!color #FF8800`)
 - `!ai <pertanyaan>`
+- Reply ke embed `🤖 AI Response` tanpa prefix untuk lanjut percakapan AI
 
 ## Catatan AI
 
@@ -77,3 +80,13 @@ Atur activity bot lewat env:
 - `BOT_STATUS`: `online`, `idle`, `dnd`, `invisible`
 - `BOT_ACTIVITY_TYPE`: `LISTENING`, `PLAYING`, `WATCHING`, `COMPETING`
 - `BOT_ACTIVITY_TEXT`: teks activity (contoh: `!help`)
+
+
+## Troubleshooting Lavalink (Unexpected server response: 200)
+
+Jika muncul error `Unexpected server response: 200`, biasanya bot mengakses endpoint HTTP biasa, bukan websocket path Lavalink.
+Pastikan env ini aktif:
+- `LAVALINK_VERSION=v4`
+- `LAVALINK_USE_VERSION_PATH=true`
+
+Konfigurasi tersebut membuat client memakai path websocket versi Lavalink v4.

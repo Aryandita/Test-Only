@@ -28,6 +28,8 @@ const lavalinkHosts = parseList(process.env.LAVALINK_HOSTS || process.env.LAVALI
 const lavalinkPorts = parseList(process.env.LAVALINK_PORTS || process.env.LAVALINK_PORT || '3010');
 const lavalinkPasswords = parseList(process.env.LAVALINK_PASSWORDS || process.env.LAVALINK_PASSWORD || 'dsc.gg/kythia');
 const lavalinkSecures = parseList(process.env.LAVALINK_SECURES || process.env.LAVALINK_SECURE || 'false');
+const lavalinkVersion = process.env.LAVALINK_VERSION || 'v4';
+const lavalinkUseVersionPath = (process.env.LAVALINK_USE_VERSION_PATH || 'true') === 'true';
 const ownerIds = new Set(parseList(process.env.OWNER_IDS));
 
 
@@ -59,6 +61,8 @@ const lavalinkNodes = lavalinkHosts.map((host, index) => ({
   port: Number(lavalinkPorts[index] || lavalinkPorts[0] || 3010),
   password: lavalinkPasswords[index] || lavalinkPasswords[0] || 'dsc.gg/kythia',
   secure: (lavalinkSecures[index] || lavalinkSecures[0] || 'false') === 'true',
+  version: lavalinkVersion,
+  useVersionPath: lavalinkUseVersionPath,
 }));
 
 if (!token) {
@@ -248,6 +252,7 @@ manager
 client.once('ready', () => {
   console.log(`✅ Bot online sebagai ${client.user.tag}`);
   console.log(`ℹ️ Lavalink nodes configured: ${lavalinkNodes.map((n) => `${n.host}:${n.port}`).join(', ')}`);
+  console.log(`ℹ️ Lavalink protocol config: version=${lavalinkVersion}, useVersionPath=${lavalinkUseVersionPath}`);
   manager.init(client.user.id);
 
   client.user.setPresence({
@@ -339,9 +344,45 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
+
+const replyToAiMessage = async (message, prompt) => {
+  if (!prompt) {
+    return sendCommandEmbed(message, {
+      title: '🤖 AI Command',
+      description: `Gunakan: ${prefix}ai <pertanyaan> atau reply ke pesan AI dengan pertanyaanmu.`,
+    });
+  }
+
+  const isOwner = ownerIds.has(message.author.id);
+  await message.channel.sendTyping();
+  const result = await generateGeminiResponse({ prompt, isOwner });
+  return sendCommandEmbed(message, {
+    title: '🤖 AI Response',
+    description: result.slice(0, 3900),
+  });
+};
+
+const isReplyingToAiMessage = async (message) => {
+  if (!message.reference?.messageId) return false;
+  const referenced = await message.fetchReference().catch(() => null);
+  if (!referenced || referenced.author.id !== client.user.id) return false;
+  return referenced.embeds?.some((embed) => embed.title === '🤖 AI Response');
+};
+
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.guild) return;
-  if (!message.content.startsWith(prefix)) return;
+
+  const replyingToAi = await isReplyingToAiMessage(message);
+  if (!message.content.startsWith(prefix) && !replyingToAi) return;
+
+  if (replyingToAi && !message.content.startsWith(prefix)) {
+    try {
+      return await replyToAiMessage(message, message.content.trim());
+    } catch (error) {
+      console.error(error);
+      return sendCommandEmbed(message, { title: '❌ Error', description: error.message || 'Terjadi kesalahan saat menjalankan command.' });
+    }
+  }
 
   const [command, ...args] = message.content.slice(prefix.length).trim().split(/\s+/);
   const cmd = command?.toLowerCase();
@@ -366,20 +407,7 @@ client.on('messageCreate', async (message) => {
 
     if (cmd === 'ai') {
       const prompt = args.join(' ').trim();
-      if (!prompt) {
-        return sendCommandEmbed(message, {
-          title: '🤖 AI Command',
-          description: `Gunakan: ${prefix}ai <pertanyaan>`,
-        });
-      }
-
-      const isOwner = ownerIds.has(message.author.id);
-      await message.channel.sendTyping();
-      const result = await generateGeminiResponse({ prompt, isOwner });
-      return sendCommandEmbed(message, {
-        title: '🤖 AI Response',
-        description: result.slice(0, 3900),
-      });
+      return replyToAiMessage(message, prompt);
     }
 
     if (cmd === 'play' || cmd === 'p') {
