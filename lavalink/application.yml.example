@@ -1,6 +1,6 @@
-# Lavalink v4 (disarankan terbaru) - D.A.V.E ready
+# Lavalink v4.2.2 - D.A.V.E ready
 # Jalankan dengan image contoh:
-# ghcr.io/lavalink-devs/lavalink:4
+# ghcr.io/lavalink-devs/lavalink:4.2.2
 
 server:
   port: 2333

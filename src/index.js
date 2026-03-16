@@ -8,6 +8,7 @@ const {
   EmbedBuilder,
   GatewayIntentBits,
   Partials,
+  ActivityType,
 } = require('discord.js');
 const { Manager } = require('erela.js');
 
@@ -28,6 +29,19 @@ const lavalinkPorts = parseList(process.env.LAVALINK_PORTS || process.env.LAVALI
 const lavalinkPasswords = parseList(process.env.LAVALINK_PASSWORDS || process.env.LAVALINK_PASSWORD || 'dsc.gg/kythia');
 const lavalinkSecures = parseList(process.env.LAVALINK_SECURES || process.env.LAVALINK_SECURE || 'false');
 const ownerIds = new Set(parseList(process.env.OWNER_IDS));
+
+
+const activityTypeMap = {
+  PLAYING: ActivityType.Playing,
+  LISTENING: ActivityType.Listening,
+  WATCHING: ActivityType.Watching,
+  COMPETING: ActivityType.Competing,
+};
+
+const botStatus = process.env.BOT_STATUS || 'online';
+const botActivityTypeRaw = (process.env.BOT_ACTIVITY_TYPE || 'LISTENING').toUpperCase();
+const botActivityType = activityTypeMap[botActivityTypeRaw] ?? ActivityType.Listening;
+const botActivityText = process.env.BOT_ACTIVITY_TEXT || `${prefix}help`;
 
 const parseHexColor = (hex) => {
   if (!hex) return null;
@@ -235,6 +249,15 @@ client.once('ready', () => {
   console.log(`✅ Bot online sebagai ${client.user.tag}`);
   console.log(`ℹ️ Lavalink nodes configured: ${lavalinkNodes.map((n) => `${n.host}:${n.port}`).join(', ')}`);
   manager.init(client.user.id);
+
+  client.user.setPresence({
+    status: botStatus,
+    activities: [{
+      name: botActivityText,
+      type: botActivityType,
+    }],
+  });
+  console.log(`ℹ️ Activity set: ${botActivityTypeRaw} ${botActivityText}`);
 
   if (stay247Default) {
     console.log('ℹ️ STAY_24_7 default aktif dari environment.');

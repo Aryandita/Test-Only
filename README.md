@@ -1,7 +1,7 @@
-# Discord Music Bot (Lavalink v4 + D.A.V.E + Gemini AI)
+# Discord Music Bot (Lavalink v4.2.2 + D.A.V.E + Gemini AI)
 
 Template music bot Discord dengan:
-- Lavalink v4 (D.A.V.E ready)
+- Lavalink v4.2.2 (D.A.V.E ready)
 - Multi-source playback
 - Tombol kontrol musik
 - AI Gemini 2.5 Flash
@@ -23,6 +23,9 @@ PREFIX=!
 STAY_24_7=false
 OWNER_IDS=123456789012345678,987654321098765432
 EMBED_COLOR=#5865F2
+BOT_STATUS=online
+BOT_ACTIVITY_TYPE=LISTENING
+BOT_ACTIVITY_TEXT=!help
 
 LAVALINK_HOST=hyperion.kythia.xyz
 LAVALINK_PORT=3010
@@ -66,3 +69,11 @@ GEMINI_MODEL=gemini-2.5-flash
 ```bash
 npm run check
 ```
+
+
+## Status Activity Bot
+
+Atur activity bot lewat env:
+- `BOT_STATUS`: `online`, `idle`, `dnd`, `invisible`
+- `BOT_ACTIVITY_TYPE`: `LISTENING`, `PLAYING`, `WATCHING`, `COMPETING`
+- `BOT_ACTIVITY_TEXT`: teks activity (contoh: `!help`)
