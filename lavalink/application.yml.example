@@ -1,0 +1,65 @@
+# Lavalink v4.2.2 - D.A.V.E ready
+# Jalankan dengan image contoh:
+# ghcr.io/lavalink-devs/lavalink:4.2.2
+
+server:
+  port: 2333
+
+lavalink:
+  plugins:
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.11.5"
+      repository: "https://maven.lavalink.dev/releases"
+    - dependency: "com.github.topi314.lavasrc:lavasrc-plugin:4.6.0"
+      repository: "https://maven.lavalink.dev/releases"
+
+  server:
+    password: "youshallnotpass"
+    sources:
+      youtube: false
+      soundcloud: false
+      bandcamp: true
+      vimeo: true
+      twitch: true
+      http: true
+      local: false
+    filters:
+      volume: true
+      equalizer: true
+      karaoke: true
+      timescale: true
+      tremolo: true
+      vibrato: true
+      distortion: true
+      rotation: true
+      channelMix: true
+      lowPass: true
+    bufferDurationMs: 400
+    frameBufferDurationMs: 5000
+    opusEncodingQuality: 10
+    resamplingQuality: HIGH
+    trackStuckThresholdMs: 10000
+    useSeekGhosting: true
+    playerUpdateInterval: 5
+
+plugins:
+  youtube:
+    enabled: true
+    allowSearch: true
+    clients:
+      - MUSIC
+      - WEB
+
+  lavasrc:
+    providers:
+      - "ytsearch:%QUERY%"
+      - "scsearch:%QUERY%"
+    sources:
+      spotify: true
+      applemusic: true
+      deezer: true
+      yandexmusic: false
+      flowerytts: false
+
+# Catatan:
+# - D.A.V.E ditangani pada stack Lavalink + plugin terbaru.
+# - Pastikan Java 21+ dan gunakan build Lavalink terbaru v4.
