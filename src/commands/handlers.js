@@ -192,7 +192,7 @@ export async function handleGameButton(interaction, context) {
 
 function normalizePrefixPayload(body) {
   if (typeof body === 'string') return { content: body };
-  const { ephemeral, flags, ...rest } = body;
+  const { ephemeral, ...rest } = body;
   return rest;
 }
 
