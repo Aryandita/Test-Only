@@ -115,3 +115,5 @@ Atur status/activity bot lewat env:
 - Aktifkan autoplay lewat `/autoplay`, `!autoplay`, atau tombol `♾️ Autoplay`.
 - Saat lagu berakhir dan lanjut ke lagu berikutnya, bot otomatis kirim panel musik baru agar tombol skip/loop/autoplay/stop tetap mudah diakses.
 - Untuk AI, kamu bisa **reply** pesan jawaban AI lalu lanjut tanya; bot akan melanjutkan konteks obrolan di channel yang sama.
+- Saat AI memproses jawaban, bot memunculkan indikator typing/thinking.
+- Jika playlist/antrian selesai total, bot mengirim embed penanda bahwa musik telah selesai.

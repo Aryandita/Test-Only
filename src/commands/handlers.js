@@ -9,11 +9,28 @@ import {
 
 const tttGames = new Map();
 const aiThreads = new Map();
+const aiReplyOwners = new Map();
 const RPS_CHOICES = ['rock', 'paper', 'scissors'];
 const RPS_EMOJI = { rock: '✊', paper: '✋', scissors: '✌️' };
 
 function isOwner(userId, ownerId) {
   return userId === ownerId;
+}
+
+function startTypingLoop(channel) {
+  if (!channel?.sendTyping) return () => {};
+  channel.sendTyping().catch(() => null);
+  const interval = setInterval(() => channel.sendTyping().catch(() => null), 7000);
+  return () => clearInterval(interval);
+}
+
+function rememberAiReply(message, userId) {
+  if (!message?.id) return;
+  aiReplyOwners.set(message.id, userId);
+  if (aiReplyOwners.size > 500) {
+    const firstKey = aiReplyOwners.keys().next().value;
+    aiReplyOwners.delete(firstKey);
+  }
 }
 
 export async function handleCommand(interaction, context) {
@@ -34,7 +51,8 @@ export async function handleCommand(interaction, context) {
     shardId: interaction.guild?.shardId,
     reply: (payload) => interaction.reply(payload),
     deferReply: (payload) => interaction.deferReply(payload),
-    editReply: (payload) => interaction.editReply(payload)
+    editReply: (payload) => interaction.editReply(payload),
+    sourceChannel: interaction.channel
   });
 }
 
@@ -62,7 +80,8 @@ export async function handlePrefixCommand(message, context) {
     shardId: message.guild?.shardId,
     reply: (body) => message.reply(normalizePrefixPayload(body)),
     deferReply: async () => {},
-    editReply: (body) => message.reply(normalizePrefixPayload(body))
+    editReply: (body) => message.reply(normalizePrefixPayload(body)),
+    sourceChannel: message.channel
   };
 
   try {
@@ -79,24 +98,24 @@ export async function handlePrefixCommand(message, context) {
 export async function handleAiReplyMessage(message, context) {
   if (message.author.bot || !message.reference?.messageId) return;
 
-  const replied = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
-  if (!replied || !replied.author?.bot) return;
-
-  const marker = replied.embeds?.[0]?.footer?.text;
-  if (!marker?.startsWith('AI_THREAD:')) return;
-
-  const originalUserId = marker.split(':')[1];
-  if (originalUserId !== message.author.id) return;
+  const ownerId = aiReplyOwners.get(message.reference.messageId);
+  if (!ownerId || ownerId !== message.author.id) return;
 
   const threadKey = `${message.channelId}:${message.author.id}`;
   const existing = aiThreads.get(threadKey) ?? [];
   const prompt = message.content.trim();
   if (!prompt) return;
 
-  const answer = await context.aiService.ask({ userId: message.author.id, prompt, history: existing });
-  aiThreads.set(threadKey, [...existing, { role: 'user', text: prompt }, { role: 'assistant', text: answer }].slice(-8));
+  const stopTyping = startTypingLoop(message.channel);
+  try {
+    const answer = await context.aiService.ask({ userId: message.author.id, prompt, history: existing });
+    aiThreads.set(threadKey, [...existing, { role: 'user', text: prompt }, { role: 'assistant', text: answer }].slice(-8));
 
-  await message.reply({ embeds: [createAiAnswerEmbed({ color: context.env.embedHex, answer, userId: message.author.id })] });
+    const sent = await message.reply({ embeds: [createAiAnswerEmbed({ color: context.env.embedHex, answer })] });
+    rememberAiReply(sent, message.author.id);
+  } finally {
+    stopTyping();
+  }
 }
 
 function normalizePrefixPayload(body) {
@@ -106,7 +125,7 @@ function normalizePrefixPayload(body) {
 }
 
 async function runCommand(input) {
-  const { command, args, context, guildId, channelId, userId, member, shardId, reply, deferReply, editReply } = input;
+  const { command, args, context, guildId, channelId, userId, member, shardId, reply, deferReply, editReply, sourceChannel } = input;
   const { musicManager, aiService, env, registerCommands, client } = context;
 
   switch (command) {
@@ -219,21 +238,13 @@ async function runCommand(input) {
 
     case 'loop': {
       const enabled = musicManager.toggleLoop(guildId);
-      await reply({
-        embeds: [
-          createStatusEmbed({ color: env.embedHex, title: '🔁 Status Loop', description: enabled ? 'Loop diaktifkan.' : 'Loop dimatikan.' })
-        ]
-      });
+      await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '🔁 Status Loop', description: enabled ? 'Loop diaktifkan.' : 'Loop dimatikan.' })] });
       return;
     }
 
     case 'autoplay': {
       const enabled = musicManager.toggleAutoplay(guildId);
-      await reply({
-        embeds: [
-          createStatusEmbed({ color: env.embedHex, title: '♾️ Status Autoplay', description: enabled ? 'Autoplay diaktifkan.' : 'Autoplay dimatikan.' })
-        ]
-      });
+      await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '♾️ Status Autoplay', description: enabled ? 'Autoplay diaktifkan.' : 'Autoplay dimatikan.' })] });
       return;
     }
 
@@ -248,11 +259,17 @@ async function runCommand(input) {
       }
 
       await deferReply();
-      const threadKey = `${channelId}:${userId}`;
-      const history = aiThreads.get(threadKey) ?? [];
-      const answer = await aiService.ask({ userId, prompt, history });
-      aiThreads.set(threadKey, [...history, { role: 'user', text: prompt }, { role: 'assistant', text: answer }].slice(-8));
-      await editReply({ embeds: [createAiAnswerEmbed({ color: env.embedHex, answer, userId })] });
+      const stopTyping = startTypingLoop(sourceChannel);
+      try {
+        const threadKey = `${channelId}:${userId}`;
+        const history = aiThreads.get(threadKey) ?? [];
+        const answer = await aiService.ask({ userId, prompt, history });
+        aiThreads.set(threadKey, [...history, { role: 'user', text: prompt }, { role: 'assistant', text: answer }].slice(-8));
+        const sent = await editReply({ embeds: [createAiAnswerEmbed({ color: env.embedHex, answer })] });
+        rememberAiReply(sent, userId);
+      } finally {
+        stopTyping();
+      }
       return;
     }
 

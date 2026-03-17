@@ -15,6 +15,7 @@ export class MusicManager {
 
     this.client = client;
     this.onTrackStart = null;
+    this.onQueueEnd = null;
     this.shoukaku = new Shoukaku(new Connectors.DiscordJS(client), nodes, {
       moveOnDisconnect: false,
       moveOnDestroy: false,
@@ -35,6 +36,10 @@ export class MusicManager {
     this.onTrackStart = callback;
   }
 
+  setQueueEndNotifier(callback) {
+    this.onQueueEnd = callback;
+  }
+
   getQueue(guildId) {
     if (!queueStore.has(guildId)) {
       queueStore.set(guildId, {
@@ -42,7 +47,9 @@ export class MusicManager {
         current: null,
         textChannelId: null,
         loop: false,
-        autoplay: false
+        autoplay: false,
+        manualTransition: false,
+        advancing: false
       });
     }
     return queueStore.get(guildId);
@@ -58,6 +65,8 @@ export class MusicManager {
 
     player.on('end', async () => {
       try {
+        const queue = this.getQueue(guildId);
+        if (queue.manualTransition || queue.advancing) return;
         await this.playNext(guildId, { isAutoTransition: true });
       } catch (error) {
         console.error(`❌ Gagal auto-play next (${guildId}): ${error.message}`);
@@ -113,48 +122,64 @@ export class MusicManager {
     const queue = this.getQueue(guildId);
 
     if (!player) throw new Error('Player tidak ditemukan.');
+    if (queue.advancing && !options.force) return queue.current;
 
-    if (queue.loop && queue.current) {
-      queue.tracks.unshift(queue.current);
+    queue.advancing = true;
+    try {
+      if (queue.loop && queue.current) {
+        queue.tracks.unshift(queue.current);
+      }
+
+      let nextTrack = queue.tracks.shift();
+
+      if (!nextTrack && queue.autoplay && queue.current) {
+        const recommendations = await this.resolveTracks(`${queue.current.info.author} - ${queue.current.info.title}`);
+        nextTrack = recommendations.find((track) => track.info?.identifier !== queue.current.info?.identifier) ?? recommendations[0];
+      }
+
+      if (!nextTrack) {
+        queue.current = null;
+        await player.stopTrack();
+        if (this.onQueueEnd) {
+          await this.onQueueEnd({ guildId, queue });
+        }
+        return null;
+      }
+
+      queue.current = nextTrack;
+
+      const encodedTrack = nextTrack.encoded ?? nextTrack.track ?? nextTrack.encodedTrack;
+      if (!encodedTrack) throw new Error('Encoded track tidak ditemukan dari hasil Lavalink.');
+
+      await player.playTrack({ encodedTrack });
+
+      if (this.onTrackStart) {
+        await this.onTrackStart({
+          guildId,
+          track: nextTrack,
+          queue,
+          isAutoTransition: Boolean(options.isAutoTransition)
+        });
+      }
+
+      return nextTrack;
+    } finally {
+      queue.advancing = false;
     }
-
-    let nextTrack = queue.tracks.shift();
-
-    if (!nextTrack && queue.autoplay && queue.current) {
-      const recommendations = await this.resolveTracks(`${queue.current.info.author} - ${queue.current.info.title}`);
-      nextTrack = recommendations.find((track) => track.info?.identifier !== queue.current.info?.identifier) ?? recommendations[0];
-    }
-
-    if (!nextTrack) {
-      queue.current = null;
-      await player.stopTrack();
-      return null;
-    }
-
-    queue.current = nextTrack;
-
-    const encodedTrack = nextTrack.encoded ?? nextTrack.track ?? nextTrack.encodedTrack;
-    if (!encodedTrack) throw new Error('Encoded track tidak ditemukan dari hasil Lavalink.');
-
-    await player.playTrack({ encodedTrack });
-
-    if (this.onTrackStart) {
-      await this.onTrackStart({
-        guildId,
-        track: nextTrack,
-        queue,
-        isAutoTransition: Boolean(options.isAutoTransition)
-      });
-    }
-
-    return nextTrack;
   }
 
   async skip(guildId) {
     const player = this.shoukaku.players.get(guildId);
+    const queue = this.getQueue(guildId);
     if (!player) throw new Error('Player tidak ditemukan.');
-    await player.stopTrack();
-    return this.playNext(guildId, { isAutoTransition: true });
+
+    queue.manualTransition = true;
+    try {
+      await player.stopTrack();
+      return await this.playNext(guildId, { isAutoTransition: true, force: true });
+    } finally {
+      queue.manualTransition = false;
+    }
   }
 
   async stop(guildId) {
@@ -163,6 +188,8 @@ export class MusicManager {
     queue.tracks = [];
     queue.current = null;
     queue.loop = false;
+    queue.manualTransition = false;
+    queue.advancing = false;
 
     if (player) {
       await player.stopTrack();

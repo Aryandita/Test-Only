@@ -4,7 +4,7 @@ import { AIService } from './services/ai-service.js';
 import { MusicManager } from './services/music-manager.js';
 import { registerInteractionHandler } from './events/interaction-create.js';
 import { deployCommands } from './deploy-commands.js';
-import { createMusicControlComponents, createNowPlayingEmbed } from './utils/music-ui.js';
+import { createMusicControlComponents, createNowPlayingEmbed, createStatusEmbed } from './utils/music-ui.js';
 
 const client = new Client({
   intents: [
@@ -31,6 +31,24 @@ musicManager.setTrackStartNotifier(async ({ guildId, track, queue, isAutoTransit
   });
 
   await channel.send({ embeds: [embed], components: createMusicControlComponents(queue.autoplay) }).catch(() => null);
+});
+
+musicManager.setQueueEndNotifier(async ({ queue }) => {
+  if (!queue.textChannelId) return;
+  const channel = await client.channels.fetch(queue.textChannelId).catch(() => null);
+  if (!channel?.isTextBased()) return;
+
+  await channel
+    .send({
+      embeds: [
+        createStatusEmbed({
+          color: env.embedHex,
+          title: '✅ Musik Selesai',
+          description: 'Antrian telah habis. Tambahkan lagu baru untuk memulai lagi.'
+        })
+      ]
+    })
+    .catch(() => null);
 });
 
 async function registerCommands() {

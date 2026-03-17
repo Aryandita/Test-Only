@@ -36,12 +36,8 @@ export function createStatusEmbed({ color, title, description }) {
   return new EmbedBuilder().setColor(color).setTitle(title).setDescription(description);
 }
 
-export function createAiAnswerEmbed({ color, answer, userId }) {
-  return new EmbedBuilder()
-    .setColor(color)
-    .setTitle('💡 Jawaban')
-    .setDescription(answer.slice(0, 4000))
-    .setFooter({ text: `AI_THREAD:${userId}` });
+export function createAiAnswerEmbed({ color, answer }) {
+  return new EmbedBuilder().setColor(color).setTitle('💡 Jawaban').setDescription(answer.slice(0, 4000));
 }
 
 export function formatQueue(queue) {
