@@ -69,8 +69,8 @@ npm run start
 - `/loop` 🔁 toggle loop
 - `/autoplay` ♾️ toggle autoplay rekomendasi
 - `/ai` 🤖 tanya AI
-- `/rps` ✊ main rock paper scissors
-- `/tictactoe` ❎ main tic tac toe
+- `/rps` ✊ main rock paper scissors via tombol
+- `/tictactoe` ❎ main tic tac toe via tombol
 - `/restart` ♻️ owner only
 - `/owner-stats` 👑 owner only
 - `/owner-sync` 🛠️ owner only
@@ -84,9 +84,8 @@ Prefix default `!` (ubah via `BOT_PREFIX`).
 - `!loop`
 - `!autoplay`
 - `!ai <prompt>`
-- `!rps <rock/paper/scissors>`
-- `!tictactoe start`
-- `!tictactoe <1-9>`
+- `!rps` (panel tombol)
+- `!tictactoe` (panel tombol)
 - `!help`
 
 ## 6) AI Persona & Style
@@ -114,6 +113,7 @@ Atur status/activity bot lewat env:
 ## 10) Autoplay & AI Chat Thread
 - Aktifkan autoplay lewat `/autoplay`, `!autoplay`, atau tombol `♾️ Autoplay`.
 - Saat lagu berakhir dan lanjut ke lagu berikutnya, bot otomatis kirim panel musik baru agar tombol skip/loop/autoplay/stop tetap mudah diakses.
+- Autoplay akan mencari lagu lanjutan berdasarkan artis serupa + tema lagu (judul/vibe), dan menampilkan pesan processing saat pencarian.
 - Untuk AI, kamu bisa **reply** pesan jawaban AI lalu lanjut tanya; bot akan melanjutkan konteks obrolan di channel yang sama.
 - Saat AI memproses jawaban, bot memunculkan indikator typing/thinking.
 - Jika playlist/antrian selesai total, bot mengirim embed penanda bahwa musik telah selesai.

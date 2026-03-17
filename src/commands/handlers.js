@@ -3,7 +3,9 @@ import {
   createAiAnswerEmbed,
   createMusicControlComponents,
   createNowPlayingEmbed,
+  createRpsPanel,
   createStatusEmbed,
+  createTttPanel,
   formatQueue
 } from '../utils/music-ui.js';
 
@@ -39,9 +41,7 @@ export async function handleCommand(interaction, context) {
     args: {
       query: interaction.options.getString('query'),
       prompt: interaction.options.getString('prompt'),
-      rpsChoice: interaction.options.getString('pilihan'),
-      tttAction: interaction.options.getString('aksi'),
-      tttPosition: interaction.options.getInteger('posisi')
+      rpsChoice: interaction.options.getString('pilihan')
     },
     context,
     guildId: interaction.guildId,
@@ -68,9 +68,7 @@ export async function handlePrefixCommand(message, context) {
     args: {
       query: rest.join(' ').trim(),
       prompt: rest.join(' ').trim(),
-      rpsChoice: rest[0]?.toLowerCase(),
-      tttAction: rest[0]?.toLowerCase(),
-      tttPosition: Number(rest[0])
+      rpsChoice: rest[0]?.toLowerCase()
     },
     context,
     guildId: message.guildId,
@@ -118,6 +116,73 @@ export async function handleAiReplyMessage(message, context) {
   }
 }
 
+export async function handleGameButton(interaction, context) {
+  const { env } = context;
+
+  if (interaction.customId.startsWith('game:rps:')) {
+    const [, , ownerId, choice] = interaction.customId.split(':');
+    if (interaction.user.id !== ownerId) {
+      await interaction.reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '⛔ Bukan Giliran Kamu', description: 'Tombol ini milik user lain.' })], ephemeral: true });
+      return;
+    }
+
+    const botChoice = RPS_CHOICES[Math.floor(Math.random() * RPS_CHOICES.length)];
+    const result = resolveRpsResult(choice, botChoice);
+    await interaction.update({
+      embeds: [
+        createStatusEmbed({
+          color: env.embedHex,
+          title: '🕹️ Hasil Rock Paper Scissors',
+          description: `Kamu: ${RPS_EMOJI[choice]} **${choice}**\nBot: ${RPS_EMOJI[botChoice]} **${botChoice}**\n\nHasil: **${result}**`
+        })
+      ],
+      components: []
+    });
+    return;
+  }
+
+  if (interaction.customId.startsWith('game:ttt:')) {
+    const [, , ownerId, idxRaw] = interaction.customId.split(':');
+    const idx = Number(idxRaw);
+
+    if (interaction.user.id !== ownerId) {
+      await interaction.reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '⛔ Bukan Giliran Kamu', description: 'Tombol ini milik user lain.' })], ephemeral: true });
+      return;
+    }
+
+    const gameKey = `${interaction.channelId}:${ownerId}`;
+    const game = tttGames.get(gameKey);
+    if (!game) {
+      await interaction.reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❎ Game Berakhir', description: 'Silakan mulai game baru dengan /tictactoe.' })], ephemeral: true });
+      return;
+    }
+
+    if (game.board[idx]) {
+      await interaction.reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '⚠️ Kotak Terisi', description: 'Pilih kotak lain.' })], ephemeral: true });
+      return;
+    }
+
+    game.board[idx] = 'X';
+    let winner = checkTttWinner(game.board);
+    if (winner || isBoardFull(game.board)) {
+      tttGames.delete(gameKey);
+      await interaction.update({ embeds: [createTttResultEmbed(game.board, winner, env.embedHex)], components: [] });
+      return;
+    }
+
+    const botMove = chooseBotMove(game.board);
+    game.board[botMove] = 'O';
+    winner = checkTttWinner(game.board);
+    if (winner || isBoardFull(game.board)) {
+      tttGames.delete(gameKey);
+      await interaction.update({ embeds: [createTttResultEmbed(game.board, winner, env.embedHex)], components: [] });
+      return;
+    }
+
+    await interaction.update({ ...createTttPanel({ userId: ownerId, board: game.board, statusText: 'Giliran kamu (X).' }) });
+  }
+}
+
 function normalizePrefixPayload(body) {
   if (typeof body === 'string') return { content: body };
   const { ephemeral, flags, ...rest } = body;
@@ -133,45 +198,18 @@ async function runCommand(input) {
       const query = args.query?.trim();
       const voiceChannel = member?.voice?.channel;
       if (!query) {
-        await reply({
-          embeds: [
-            createStatusEmbed({
-              color: env.embedHex,
-              title: '🎧 Query Kosong',
-              description: `Contoh: \`${env.prefix}play let her go\` atau \`/play\``
-            })
-          ],
-          ephemeral: true
-        });
+        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '🎧 Query Kosong', description: `Contoh: \`${env.prefix}play let her go\` atau \`/play\`` })], ephemeral: true });
         return;
       }
-
       if (!voiceChannel) {
-        await reply({
-          embeds: [
-            createStatusEmbed({
-              color: env.embedHex,
-              title: '🚫 Voice Channel Tidak Ditemukan',
-              description: 'Masuk voice channel dulu sebelum memutar lagu.'
-            })
-          ],
-          ephemeral: true
-        });
+        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '🚫 Voice Channel Tidak Ditemukan', description: 'Masuk voice channel dulu sebelum memutar lagu.' })], ephemeral: true });
         return;
       }
 
       await deferReply();
       const track = await musicManager.search(query);
       if (!track) {
-        await editReply({
-          embeds: [
-            createStatusEmbed({
-              color: env.embedHex,
-              title: '🔎 Lagu Tidak Ditemukan',
-              description: 'Coba kata kunci lain atau URL yang valid.'
-            })
-          ]
-        });
+        await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '🔎 Lagu Tidak Ditemukan', description: 'Coba kata kunci lain atau URL yang valid.' })] });
         return;
       }
 
@@ -196,43 +234,19 @@ async function runCommand(input) {
     case 'skip': {
       await deferReply({ flags: MessageFlags.Ephemeral });
       const track = await musicManager.skip(guildId);
-      await editReply({
-        embeds: [
-          createStatusEmbed({
-            color: env.embedHex,
-            title: '⏭️ Skip Berhasil',
-            description: track ? `Lanjut memutar **${track.info.title}**.` : 'Antrian habis.'
-          })
-        ]
-      });
+      await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '⏭️ Skip Berhasil', description: track ? `Lanjut memutar **${track.info.title}**.` : 'Antrian habis.' })] });
       return;
     }
 
     case 'stop': {
       await musicManager.stop(guildId);
-      await reply({
-        embeds: [
-          createStatusEmbed({
-            color: env.embedHex,
-            title: '⏹️ Playback Dihentikan',
-            description: 'Musik dihentikan dan bot keluar dari voice channel.'
-          })
-        ]
-      });
+      await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '⏹️ Playback Dihentikan', description: 'Musik dihentikan dan bot keluar dari voice channel.' })] });
       return;
     }
 
     case 'queue': {
       const queue = musicManager.getQueue(guildId);
-      await reply({
-        embeds: [
-          createStatusEmbed({
-            color: env.embedHex,
-            title: '📜 Daftar Antrian',
-            description: formatQueue(queue)
-          })
-        ]
-      });
+      await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '📜 Daftar Antrian', description: formatQueue(queue) })] });
       return;
     }
 
@@ -251,10 +265,7 @@ async function runCommand(input) {
     case 'ai': {
       const prompt = args.prompt?.trim();
       if (!prompt) {
-        await reply({
-          embeds: [createStatusEmbed({ color: env.embedHex, title: '💬 Prompt Kosong', description: `Contoh: \`${env.prefix}ai jelaskan setup lavalink\`` })],
-          ephemeral: true
-        });
+        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '💬 Prompt Kosong', description: `Contoh: \`${env.prefix}ai jelaskan setup lavalink\`` })], ephemeral: true });
         return;
       }
 
@@ -274,66 +285,14 @@ async function runCommand(input) {
     }
 
     case 'rps': {
-      const playerChoice = normalizeRpsChoice(args.rpsChoice);
-      if (!playerChoice) {
-        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '✊ RPS', description: `Pilih: rock/paper/scissors. Contoh: \`${env.prefix}rps rock\`` })], ephemeral: true });
-        return;
-      }
-      const botChoice = RPS_CHOICES[Math.floor(Math.random() * RPS_CHOICES.length)];
-      const result = resolveRpsResult(playerChoice, botChoice);
-      await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '🕹️ Rock Paper Scissors', description: `Kamu: ${RPS_EMOJI[playerChoice]} **${playerChoice}**\nBot: ${RPS_EMOJI[botChoice]} **${botChoice}**\n\nHasil: **${result}**` })] });
+      await reply(createRpsPanel(userId));
       return;
     }
 
     case 'tictactoe': {
-      const rawAction = args.tttAction;
-      const tttAction = rawAction === 'start' || rawAction === 'move' ? rawAction : Number.isInteger(args.tttPosition) ? 'move' : 'start';
-      const position = Number.isInteger(args.tttPosition) ? args.tttPosition : Number(rawAction);
-
-      if (tttAction === 'start') {
-        tttGames.set(channelId, { board: Array(9).fill(null), playerId: userId });
-        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❎ Tic Tac Toe Dimulai', description: `${renderBoard(tttGames.get(channelId).board)}\nGiliran kamu dulu (X). Gunakan \`/tictactoe aksi:move posisi:1-9\` atau \`${env.prefix}tictactoe 5\`.` })] });
-        return;
-      }
-
-      const game = tttGames.get(channelId);
-      if (!game) {
-        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❎ Belum Ada Game', description: `Mulai dulu dengan \`/tictactoe aksi:start\` atau \`${env.prefix}tictactoe start\`.` })], ephemeral: true });
-        return;
-      }
-      if (game.playerId !== userId) {
-        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '⛔ Game Sedang Dipakai', description: 'Game di channel ini sedang dimainkan user lain.' })], ephemeral: true });
-        return;
-      }
-      if (!Number.isInteger(position) || position < 1 || position > 9) {
-        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '🔢 Posisi Tidak Valid', description: 'Posisi harus 1 sampai 9.' })], ephemeral: true });
-        return;
-      }
-
-      const idx = position - 1;
-      if (game.board[idx]) {
-        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '⚠️ Kotak Terisi', description: 'Pilih kotak lain.' })], ephemeral: true });
-        return;
-      }
-
-      game.board[idx] = 'X';
-      let winner = checkTttWinner(game.board);
-      if (winner || isBoardFull(game.board)) {
-        tttGames.delete(channelId);
-        await reply({ embeds: [createTttResultEmbed(game.board, winner, env.embedHex)] });
-        return;
-      }
-
-      const botMove = chooseBotMove(game.board);
-      game.board[botMove] = 'O';
-      winner = checkTttWinner(game.board);
-      if (winner || isBoardFull(game.board)) {
-        tttGames.delete(channelId);
-        await reply({ embeds: [createTttResultEmbed(game.board, winner, env.embedHex)] });
-        return;
-      }
-
-      await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❎ Tic Tac Toe', description: `${renderBoard(game.board)}\nGiliran kamu (X).` })] });
+      const board = Array(9).fill(null);
+      tttGames.set(`${channelId}:${userId}`, { board, userId });
+      await reply(createTttPanel({ userId, board, statusText: 'Giliran kamu dulu (X).' }));
       return;
     }
 
@@ -368,7 +327,7 @@ async function runCommand(input) {
     }
 
     case 'help': {
-      await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '📚 Bantuan Command', description: `${env.prefix}play <query>\n${env.prefix}skip\n${env.prefix}stop\n${env.prefix}queue\n${env.prefix}loop\n${env.prefix}autoplay\n${env.prefix}ai <prompt>\n${env.prefix}rps <rock/paper/scissors>\n${env.prefix}tictactoe start\n${env.prefix}tictactoe <1-9>\n${env.prefix}help` })] });
+      await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '📚 Bantuan Command', description: `${env.prefix}play <query>\n${env.prefix}skip\n${env.prefix}stop\n${env.prefix}queue\n${env.prefix}loop\n${env.prefix}autoplay\n${env.prefix}ai <prompt>\n${env.prefix}rps\n${env.prefix}tictactoe\n${env.prefix}help` })] });
       return;
     }
 
@@ -377,31 +336,12 @@ async function runCommand(input) {
   }
 }
 
-function normalizeRpsChoice(input) {
-  const value = input?.toLowerCase();
-  if (!value) return null;
-  if (value === 'batu') return 'rock';
-  if (value === 'kertas') return 'paper';
-  if (value === 'gunting') return 'scissors';
-  return RPS_CHOICES.includes(value) ? value : null;
-}
-
 function resolveRpsResult(player, bot) {
   if (player === bot) return 'Seri 🤝';
   if ((player === 'rock' && bot === 'scissors') || (player === 'paper' && bot === 'rock') || (player === 'scissors' && bot === 'paper')) {
     return 'Kamu menang 🎉';
   }
   return 'Bot menang 🤖';
-}
-
-function renderBoard(board) {
-  const cells = board.map((value, idx) => {
-    if (value === 'X') return '❌';
-    if (value === 'O') return '⭕';
-    return `${idx + 1}️⃣`;
-  });
-
-  return `${cells.slice(0, 3).join(' | ')}\n${cells.slice(3, 6).join(' | ')}\n${cells.slice(6, 9).join(' | ')}`;
 }
 
 function checkTttWinner(board) {
@@ -439,10 +379,16 @@ function chooseBotMove(board) {
 }
 
 function createTttResultEmbed(board, winner, color) {
+  const toEmoji = (val, idx) => {
+    if (val === 'X') return '❌';
+    if (val === 'O') return '⭕';
+    return `${idx + 1}️⃣`;
+  };
+
+  const rows = [0, 1, 2]
+    .map((r) => board.slice(r * 3, r * 3 + 3).map((v, i) => toEmoji(v, r * 3 + i)).join(' | '))
+    .join('\n');
+
   const description = winner === 'X' ? 'Kamu menang 🎉' : winner === 'O' ? 'Bot menang 🤖' : 'Seri 🤝';
-  return createStatusEmbed({
-    color,
-    title: '🏁 Tic Tac Toe Selesai',
-    description: `${renderBoard(board)}\n\n${description}`
-  });
+  return createStatusEmbed({ color, title: '🏁 Tic Tac Toe Selesai', description: `${rows}\n\n${description}` });
 }

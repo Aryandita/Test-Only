@@ -1,4 +1,4 @@
-import { handleAiReplyMessage, handleCommand, handlePrefixCommand } from '../commands/handlers.js';
+import { handleAiReplyMessage, handleCommand, handleGameButton, handlePrefixCommand } from '../commands/handlers.js';
 import { createMusicControlComponents, createNowPlayingEmbed, createStatusEmbed } from '../utils/music-ui.js';
 
 export function registerInteractionHandler(client, context) {
@@ -10,6 +10,11 @@ export function registerInteractionHandler(client, context) {
       }
 
       if (interaction.isButton()) {
+        if (interaction.customId.startsWith('game:')) {
+          await handleGameButton(interaction, context);
+          return;
+        }
+
         const { musicManager, env } = context;
         if (!interaction.customId.startsWith('music:')) return;
 

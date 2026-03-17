@@ -16,6 +16,7 @@ export class MusicManager {
     this.client = client;
     this.onTrackStart = null;
     this.onQueueEnd = null;
+    this.onAutoplaySearching = null;
     this.shoukaku = new Shoukaku(new Connectors.DiscordJS(client), nodes, {
       moveOnDisconnect: false,
       moveOnDestroy: false,
@@ -40,6 +41,10 @@ export class MusicManager {
     this.onQueueEnd = callback;
   }
 
+  setAutoplaySearchingNotifier(callback) {
+    this.onAutoplaySearching = callback;
+  }
+
   getQueue(guildId) {
     if (!queueStore.has(guildId)) {
       queueStore.set(guildId, {
@@ -49,7 +54,8 @@ export class MusicManager {
         loop: false,
         autoplay: false,
         manualTransition: false,
-        advancing: false
+        advancing: false,
+        recentAutoplayIds: []
       });
     }
     return queueStore.get(guildId);
@@ -117,6 +123,55 @@ export class MusicManager {
     };
   }
 
+  async buildAutoplayCandidate(queue) {
+    if (!queue.current) return null;
+
+    if (this.onAutoplaySearching) {
+      await this.onAutoplaySearching({ queue });
+    }
+
+    const artist = queue.current.info.author ?? '';
+    const title = queue.current.info.title ?? '';
+    const cleanedTitle = title
+      .replace(/\([^)]*\)|\[[^\]]*\]/g, '')
+      .replace(/official|lyrics|video|audio|feat\.?/gi, '')
+      .trim();
+
+    const firstWords = cleanedTitle
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 4)
+      .join(' ');
+
+    const queries = [
+      `${artist} songs`,
+      `${artist} ${firstWords}`,
+      `${firstWords} vibe music`
+    ].filter((q) => q.trim().length > 0);
+
+    const unique = new Map();
+    for (const query of queries) {
+      const tracks = await this.resolveTracks(query);
+      for (const track of tracks) {
+        const id = track.info?.identifier ?? track.encoded ?? track.track;
+        if (!id || unique.has(id)) continue;
+        unique.set(id, track);
+      }
+    }
+
+    const blockedIds = new Set([queue.current.info?.identifier, ...queue.recentAutoplayIds].filter(Boolean));
+    const candidate = [...unique.values()].find((track) => !blockedIds.has(track.info?.identifier));
+
+    if (candidate?.info?.identifier) {
+      queue.recentAutoplayIds.push(candidate.info.identifier);
+      if (queue.recentAutoplayIds.length > 20) {
+        queue.recentAutoplayIds.shift();
+      }
+    }
+
+    return candidate ?? null;
+  }
+
   async playNext(guildId, options = {}) {
     const player = this.shoukaku.players.get(guildId);
     const queue = this.getQueue(guildId);
@@ -132,9 +187,8 @@ export class MusicManager {
 
       let nextTrack = queue.tracks.shift();
 
-      if (!nextTrack && queue.autoplay && queue.current) {
-        const recommendations = await this.resolveTracks(`${queue.current.info.author} - ${queue.current.info.title}`);
-        nextTrack = recommendations.find((track) => track.info?.identifier !== queue.current.info?.identifier) ?? recommendations[0];
+      if (!nextTrack && queue.autoplay) {
+        nextTrack = await this.buildAutoplayCandidate(queue);
       }
 
       if (!nextTrack) {

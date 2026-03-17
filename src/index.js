@@ -51,6 +51,24 @@ musicManager.setQueueEndNotifier(async ({ queue }) => {
     .catch(() => null);
 });
 
+musicManager.setAutoplaySearchingNotifier(async ({ queue }) => {
+  if (!queue.textChannelId) return;
+  const channel = await client.channels.fetch(queue.textChannelId).catch(() => null);
+  if (!channel?.isTextBased()) return;
+
+  await channel
+    .send({
+      embeds: [
+        createStatusEmbed({
+          color: env.embedHex,
+          title: '🔎 Mencari Lagu Selanjutnya',
+          description: 'Autoplay sedang mencari lagu dengan artis/tema serupa...'
+        })
+      ]
+    })
+    .catch(() => null);
+});
+
 async function registerCommands() {
   return deployCommands();
 }
