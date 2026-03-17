@@ -7,6 +7,7 @@ Bot Discord dengan fitur:
 - Persona AI berbeda untuk **owner** dan **member**.
 - Command owner: `/restart`, `/owner-stats`, `/owner-sync`.
 - Prefix command juga aktif (default `!`), contoh `!play`, `!ai`.
+- Tersedia mini game: Rock Paper Scissors dan Tic Tac Toe.
 - Saat `/play` dipakai ketika musik sedang berjalan, lagu akan otomatis masuk antrian.
 
 ## 1) Requirement
@@ -30,6 +31,11 @@ BOT_OWNER_ID=
 BOT_PREFIX=!
 AI_EMBED_COLOR_HEX=#5865F2
 EMBED_HEX=#5865F2
+
+# Bot Presence
+BOT_STATUS=online
+BOT_ACTIVITY_TYPE=playing
+BOT_ACTIVITY_TEXT=!help | Music & Mini Games
 
 LAVALINK_HOST=127.0.0.1
 LAVALINK_PORT=2333
@@ -62,6 +68,8 @@ npm run start
 - `/queue` 📜 lihat antrian
 - `/loop` 🔁 toggle loop
 - `/ai` 🤖 tanya AI
+- `/rps` ✊ main rock paper scissors
+- `/tictactoe` ❎ main tic tac toe
 - `/restart` ♻️ owner only
 - `/owner-stats` 👑 owner only
 - `/owner-sync` 🛠️ owner only
@@ -74,6 +82,9 @@ Prefix default `!` (ubah via `BOT_PREFIX`).
 - `!queue`
 - `!loop`
 - `!ai <prompt>`
+- `!rps <rock/paper/scissors>`
+- `!tictactoe start`
+- `!tictactoe <1-9>`
 - `!help`
 
 ## 6) AI Persona & Style
@@ -89,3 +100,10 @@ Pada versi ini, payload playback sudah disesuaikan dengan Lavalink v4 (`encodedT
 ## 8) Tampilan Embed
 - Semua pesan command utama (play/skip/stop/queue/loop/ai/help) menggunakan embed dengan warna dari `EMBED_HEX` atau `AI_EMBED_COLOR_HEX`.
 - `/play` menampilkan thumbnail dari `artworkUrl` jika tersedia.
+
+
+## 9) Bot Activity & Status
+Atur status/activity bot lewat env:
+- `BOT_STATUS`: `online`, `idle`, `dnd`, `invisible`
+- `BOT_ACTIVITY_TYPE`: `playing`, `listening`, `watching`, `competing`
+- `BOT_ACTIVITY_TEXT`: teks activity bot

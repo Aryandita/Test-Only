@@ -23,7 +23,6 @@ function parseHexColor(rawHex, envName) {
 }
 
 function resolveEmbedHex() {
-  // Backward-compat: support old name AI_EMBED_COLOR_HEX + new EMBED_HEX.
   const aiHex = parseHexColor(process.env.AI_EMBED_COLOR_HEX, 'AI_EMBED_COLOR_HEX');
   if (aiHex !== null) return aiHex;
 
@@ -40,6 +39,9 @@ export const env = {
   ownerId: requireEnv('BOT_OWNER_ID'),
   prefix: process.env.BOT_PREFIX ?? '!',
   embedHex: resolveEmbedHex(),
+  botStatus: (process.env.BOT_STATUS ?? 'online').toLowerCase(),
+  botActivityType: (process.env.BOT_ACTIVITY_TYPE ?? 'playing').toLowerCase(),
+  botActivityText: process.env.BOT_ACTIVITY_TEXT ?? '!help | Music & Mini Games',
   lavalink: {
     host: requireEnv('LAVALINK_HOST'),
     port: Number(process.env.LAVALINK_PORT ?? 2333),

@@ -7,6 +7,10 @@ import {
   formatQueue
 } from '../utils/music-ui.js';
 
+const tttGames = new Map();
+const RPS_CHOICES = ['rock', 'paper', 'scissors'];
+const RPS_EMOJI = { rock: '✊', paper: '✋', scissors: '✌️' };
+
 function isOwner(userId, ownerId) {
   return userId === ownerId;
 }
@@ -16,7 +20,10 @@ export async function handleCommand(interaction, context) {
     command: interaction.commandName,
     args: {
       query: interaction.options.getString('query'),
-      prompt: interaction.options.getString('prompt')
+      prompt: interaction.options.getString('prompt'),
+      rpsChoice: interaction.options.getString('pilihan'),
+      tttAction: interaction.options.getString('aksi'),
+      tttPosition: interaction.options.getInteger('posisi')
     },
     context,
     guildId: interaction.guildId,
@@ -41,7 +48,10 @@ export async function handlePrefixCommand(message, context) {
     command,
     args: {
       query: rest.join(' ').trim(),
-      prompt: rest.join(' ').trim()
+      prompt: rest.join(' ').trim(),
+      rpsChoice: rest[0]?.toLowerCase(),
+      tttAction: rest[0]?.toLowerCase(),
+      tttPosition: Number(rest[0])
     },
     context,
     guildId: message.guildId,
@@ -218,6 +228,138 @@ async function runCommand(input) {
       return;
     }
 
+    case 'rps': {
+      const playerChoice = normalizeRpsChoice(args.rpsChoice);
+      if (!playerChoice) {
+        await reply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '✊ RPS',
+              description: `Pilih salah satu: rock/paper/scissors. Contoh: \`${env.prefix}rps rock\``
+            })
+          ],
+          ephemeral: true
+        });
+        return;
+      }
+
+      const botChoice = RPS_CHOICES[Math.floor(Math.random() * RPS_CHOICES.length)];
+      const result = resolveRpsResult(playerChoice, botChoice);
+      await reply({
+        embeds: [
+          createStatusEmbed({
+            color: env.embedHex,
+            title: '🕹️ Rock Paper Scissors',
+            description: `Kamu: ${RPS_EMOJI[playerChoice]} **${playerChoice}**\nBot: ${RPS_EMOJI[botChoice]} **${botChoice}**\n\nHasil: **${result}**`
+          })
+        ]
+      });
+      return;
+    }
+
+    case 'tictactoe': {
+      const rawAction = args.tttAction;
+      const tttAction = rawAction === 'start' || rawAction === 'move' ? rawAction : (Number.isInteger(args.tttPosition) ? 'move' : 'start');
+      const position = Number.isInteger(args.tttPosition) ? args.tttPosition : Number(rawAction);
+
+      if (tttAction === 'start') {
+        tttGames.set(channelId, {
+          board: Array(9).fill(null),
+          playerId: userId
+        });
+
+        await reply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '❎ Tic Tac Toe Dimulai',
+              description: `${renderBoard(tttGames.get(channelId).board)}\nGiliran kamu dulu (X). Gunakan \`/tictactoe aksi:move posisi:1-9\` atau \`${env.prefix}tictactoe 5\`.`
+            })
+          ]
+        });
+        return;
+      }
+
+      const game = tttGames.get(channelId);
+      if (!game) {
+        await reply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '❎ Belum Ada Game',
+              description: `Mulai dulu dengan \`/tictactoe aksi:start\` atau \`${env.prefix}tictactoe start\`.`
+            })
+          ],
+          ephemeral: true
+        });
+        return;
+      }
+
+      if (game.playerId !== userId) {
+        await reply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '⛔ Game Sedang Dipakai',
+              description: 'Game di channel ini sedang dimainkan user lain.'
+            })
+          ],
+          ephemeral: true
+        });
+        return;
+      }
+
+      if (!Number.isInteger(position) || position < 1 || position > 9) {
+        await reply({
+          embeds: [
+            createStatusEmbed({ color: env.embedHex, title: '🔢 Posisi Tidak Valid', description: 'Posisi harus 1 sampai 9.' })
+          ],
+          ephemeral: true
+        });
+        return;
+      }
+
+      const idx = position - 1;
+      if (game.board[idx]) {
+        await reply({
+          embeds: [
+            createStatusEmbed({ color: env.embedHex, title: '⚠️ Kotak Terisi', description: 'Pilih kotak lain.' })
+          ],
+          ephemeral: true
+        });
+        return;
+      }
+
+      game.board[idx] = 'X';
+      let winner = checkTttWinner(game.board);
+      if (winner || isBoardFull(game.board)) {
+        tttGames.delete(channelId);
+        await reply({ embeds: [createTttResultEmbed(game.board, winner, env.embedHex)] });
+        return;
+      }
+
+      const botMove = chooseBotMove(game.board);
+      game.board[botMove] = 'O';
+      winner = checkTttWinner(game.board);
+      if (winner || isBoardFull(game.board)) {
+        tttGames.delete(channelId);
+        await reply({ embeds: [createTttResultEmbed(game.board, winner, env.embedHex)] });
+        return;
+      }
+
+      await reply({
+        embeds: [
+          createStatusEmbed({
+            color: env.embedHex,
+            title: '❎ Tic Tac Toe',
+            description: `${renderBoard(game.board)}\nGiliran kamu (X).`
+          })
+        ]
+      });
+      return;
+    }
+
     case 'restart': {
       if (!isOwner(userId, env.ownerId)) {
         await reply({
@@ -285,7 +427,7 @@ async function runCommand(input) {
           createStatusEmbed({
             color: env.embedHex,
             title: '📚 Bantuan Command',
-            description: `${env.prefix}play <query>\n${env.prefix}skip\n${env.prefix}stop\n${env.prefix}queue\n${env.prefix}loop\n${env.prefix}ai <prompt>\n${env.prefix}help`
+            description: `${env.prefix}play <query>\n${env.prefix}skip\n${env.prefix}stop\n${env.prefix}queue\n${env.prefix}loop\n${env.prefix}ai <prompt>\n${env.prefix}rps <rock/paper/scissors>\n${env.prefix}tictactoe start\n${env.prefix}tictactoe <1-9>\n${env.prefix}help`
           })
         ]
       });
@@ -303,4 +445,77 @@ async function runCommand(input) {
         ]
       });
   }
+}
+
+function normalizeRpsChoice(input) {
+  const value = input?.toLowerCase();
+  if (!value) return null;
+  if (value === 'batu') return 'rock';
+  if (value === 'kertas') return 'paper';
+  if (value === 'gunting') return 'scissors';
+  return RPS_CHOICES.includes(value) ? value : null;
+}
+
+function resolveRpsResult(player, bot) {
+  if (player === bot) return 'Seri 🤝';
+  if (
+    (player === 'rock' && bot === 'scissors') ||
+    (player === 'paper' && bot === 'rock') ||
+    (player === 'scissors' && bot === 'paper')
+  ) {
+    return 'Kamu menang 🎉';
+  }
+  return 'Bot menang 🤖';
+}
+
+function renderBoard(board) {
+  const cells = board.map((value, idx) => {
+    if (value === 'X') return '❌';
+    if (value === 'O') return '⭕';
+    return `${idx + 1}️⃣`;
+  });
+
+  return `${cells.slice(0, 3).join(' | ')}\n${cells.slice(3, 6).join(' | ')}\n${cells.slice(6, 9).join(' | ')}`;
+}
+
+function checkTttWinner(board) {
+  const lines = [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6]
+  ];
+
+  for (const [a, b, c] of lines) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return board[a];
+    }
+  }
+  return null;
+}
+
+function isBoardFull(board) {
+  return board.every(Boolean);
+}
+
+function chooseBotMove(board) {
+  const empty = board
+    .map((value, idx) => ({ value, idx }))
+    .filter((cell) => !cell.value)
+    .map((cell) => cell.idx);
+
+  return empty[Math.floor(Math.random() * empty.length)];
+}
+
+function createTttResultEmbed(board, winner, color) {
+  const description = winner === 'X' ? 'Kamu menang 🎉' : winner === 'O' ? 'Bot menang 🤖' : 'Seri 🤝';
+  return createStatusEmbed({
+    color,
+    title: '🏁 Tic Tac Toe Selesai',
+    description: `${renderBoard(board)}\n\n${description}`
+  });
 }
