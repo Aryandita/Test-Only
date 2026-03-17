@@ -90,6 +90,16 @@ export function createTttPanel({ userId, board, statusText }) {
   return { components: [container, ...rows], flags: MessageFlags.IsComponentsV2 };
 }
 
+
+export function createGameResultPanel({ title, description }) {
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`))
+    .addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small))
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(description));
+
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
+}
+
 export function formatQueue(queue) {
   if (!queue.current && queue.tracks.length === 0) {
     return 'Queue kosong.';

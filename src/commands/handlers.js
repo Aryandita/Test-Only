@@ -1,6 +1,7 @@
 import { MessageFlags } from 'discord.js';
 import {
   createAiAnswerEmbed,
+  createGameResultPanel,
   createMusicControlComponents,
   createNowPlayingEmbed,
   createRpsPanel,
@@ -128,16 +129,12 @@ export async function handleGameButton(interaction, context) {
 
     const botChoice = RPS_CHOICES[Math.floor(Math.random() * RPS_CHOICES.length)];
     const result = resolveRpsResult(choice, botChoice);
-    await interaction.update({
-      embeds: [
-        createStatusEmbed({
-          color: env.embedHex,
-          title: '🕹️ Hasil Rock Paper Scissors',
-          description: `Kamu: ${RPS_EMOJI[choice]} **${choice}**\nBot: ${RPS_EMOJI[botChoice]} **${botChoice}**\n\nHasil: **${result}**`
-        })
-      ],
-      components: []
-    });
+    await interaction.update(
+      createGameResultPanel({
+        title: '🕹️ Hasil Rock Paper Scissors',
+        description: `Kamu: ${RPS_EMOJI[choice]} **${choice}**\nBot: ${RPS_EMOJI[botChoice]} **${botChoice}**\n\nHasil: **${result}**`
+      })
+    );
     return;
   }
 
@@ -166,7 +163,12 @@ export async function handleGameButton(interaction, context) {
     let winner = checkTttWinner(game.board);
     if (winner || isBoardFull(game.board)) {
       tttGames.delete(gameKey);
-      await interaction.update({ embeds: [createTttResultEmbed(game.board, winner, env.embedHex)], components: [] });
+      await interaction.update(
+        createGameResultPanel({
+          title: '🏁 Tic Tac Toe Selesai',
+          description: createTttResultText(game.board, winner)
+        })
+      );
       return;
     }
 
@@ -175,7 +177,12 @@ export async function handleGameButton(interaction, context) {
     winner = checkTttWinner(game.board);
     if (winner || isBoardFull(game.board)) {
       tttGames.delete(gameKey);
-      await interaction.update({ embeds: [createTttResultEmbed(game.board, winner, env.embedHex)], components: [] });
+      await interaction.update(
+        createGameResultPanel({
+          title: '🏁 Tic Tac Toe Selesai',
+          description: createTttResultText(game.board, winner)
+        })
+      );
       return;
     }
 
@@ -378,7 +385,7 @@ function chooseBotMove(board) {
   return empty[Math.floor(Math.random() * empty.length)];
 }
 
-function createTttResultEmbed(board, winner, color) {
+function createTttResultText(board, winner) {
   const toEmoji = (val, idx) => {
     if (val === 'X') return '❌';
     if (val === 'O') return '⭕';
@@ -390,5 +397,5 @@ function createTttResultEmbed(board, winner, color) {
     .join('\n');
 
   const description = winner === 'X' ? 'Kamu menang 🎉' : winner === 'O' ? 'Bot menang 🤖' : 'Seri 🤝';
-  return createStatusEmbed({ color, title: '🏁 Tic Tac Toe Selesai', description: `${rows}\n\n${description}` });
+  return `${rows}\n\n${description}`;
 }
