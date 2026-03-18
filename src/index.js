@@ -2,6 +2,11 @@ import { ActivityType, Client, GatewayIntentBits } from 'discord.js';
 import { env } from './config/env.js';
 import { AIService } from './services/ai-service.js';
 import { MusicManager } from './services/music-manager.js';
+import EconomyService from './services/economy-service.js';
+import greetingService from './services/greeting-service.js';
+import boostService from './services/boost-service.js';
+import tempVoiceService from './services/temp-voice-service.js';
+import { connect as connectDB } from './database/db.js';
 import { registerInteractionHandler } from './events/interaction-create.js';
 import { deployCommands } from './deploy-commands.js';
 import { createMusicControlComponents, createNowPlayingEmbed, createStatusEmbed } from './utils/music-ui.js';
@@ -9,14 +14,16 @@ import { createMusicControlComponents, createNowPlayingEmbed, createStatusEmbed 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
 });
 
-const aiService = new AIService(env.geminiApiKey, env.ownerId);
+const aiService = new AIService(env.geminiApiKey, env.ownerId, env.embedHex);
 const musicManager = new MusicManager(client, env);
+const musicLevellingService = new MusicLevellingService();
 
 musicManager.setTrackStartNotifier(async ({ guildId, track, queue, isAutoTransition }) => {
   if (!isAutoTransition || !queue.textChannelId) return;
@@ -30,7 +37,7 @@ musicManager.setTrackStartNotifier(async ({ guildId, track, queue, isAutoTransit
     color: env.embedHex
   });
 
-  await channel.send({ embeds: [embed], components: createMusicControlComponents(queue.autoplay) }).catch(() => null);
+  await channel.send({ embeds: [embed], components: createMusicControlComponents(queue.autoplay, queue.twentyfourseven, env) }).catch(() => null);
 });
 
 musicManager.setQueueEndNotifier(async ({ queue }) => {
@@ -94,10 +101,20 @@ registerInteractionHandler(client, {
   env,
   aiService,
   musicManager,
+  economyService: EconomyService,
+  greetingService,
+  boostService,
+  tempVoiceService,
   registerCommands
 });
 
 client.once('ready', async () => {
+  // Connect to MongoDB
+  const dbConnected = await connectDB();
+  if (!dbConnected) {
+    console.warn('⚠️ Bot berjalan tanpa database. Fitur ekonomi tidak tersedia.');
+  }
+
   client.user.setPresence({
     status: resolveStatus(env.botStatus),
     activities: [{ name: env.botActivityText, type: resolveActivityType(env.botActivityType) }]

@@ -1,12 +1,15 @@
+import { EmbedBuilder } from 'discord.js';
+
 const PERSONA_MEMBER =
-  'Jawab langsung ke inti dalam bahasa Indonesia, tanpa salam pembuka/penutup, tanpa menyebut model AI, tetap sopan dan ringkas.';
+  'Jawab langsung ke inti dalam bahasa Indonesia, tanpa salam pembuka/penutup, tanpa menyebut model AI, tetap sopan dan ringkas. Fokus pada konten yang berguna dan jelas.';
 const PERSONA_OWNER =
-  'Jawab langsung ke inti untuk kebutuhan owner bot, detail teknis bila perlu, tanpa salam, tanpa menyebut model AI.';
+  'Jawab langsung ke inti untuk kebutuhan owner bot, detail teknis bila perlu, tanpa salam, tanpa menyebut model AI. Sediakan informasi komprehensif dan actionable.';
 
 export class AIService {
-  constructor(apiKey, ownerId) {
+  constructor(apiKey, ownerId, embedHex = 0x5865f2) {
     this.ownerId = ownerId;
     this.apiKey = apiKey;
+    this.embedHex = embedHex;
   }
 
   async ask({ userId, prompt, history = [] }) {
@@ -30,7 +33,7 @@ export class AIService {
           contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
           generationConfig: {
             temperature: userId === this.ownerId ? 0.6 : 0.7,
-            maxOutputTokens: 700
+            maxOutputTokens: 2000
           }
         })
       }
@@ -43,6 +46,22 @@ export class AIService {
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    return text || 'Tidak ada jawaban yang bisa diberikan untuk prompt tersebut.';
+    const answer = text || '⚠️ Tidak bisa memberikan jawaban. Coba pertanyaan yang berbeda.';
+
+    // Return text for history tracking
+    return answer;
+  }
+
+  /**
+   * Buat embed untuk jawaban AI dengan warna hex yang stabil dari env
+   * @param {string} answer - Teks jawaban dari AI
+   * @returns {EmbedBuilder} Discord embed dengan warna dari env.embedHex
+   */
+  createAnswerEmbed(answer) {
+    return new EmbedBuilder()
+      .setColor(this.embedHex)
+      .setTitle('💡 Jawaban')
+      .setDescription(answer.slice(0, 4000))
+      .setFooter({ text: '🤖 Powered by Gemini AI' });
   }
 }

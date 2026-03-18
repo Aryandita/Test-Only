@@ -1,14 +1,28 @@
 import { MessageFlags } from 'discord.js';
 import {
-  createAiAnswerEmbed,
+  createBalanceEmbed,
+  createBegRewardEmbed,
+  createBuyCarEmbed,
+  createDailyCheckInEmbed,
+  createDailyRewardEmbed,
   createGameResultPanel,
+  createLeaderboardEmbed,
+  createLyricsEmbed,
   createMusicControlComponents,
   createNowPlayingEmbed,
+  createProfileEmbed,
+  createRaceResultEmbed,
   createRpsPanel,
+  createShopEmbed,
   createStatusEmbed,
+  createTransferEmbed,
+  createTransferErrorEmbed,
   createTttPanel,
+  createWeeklyCheckInEmbed,
+  createWorkRewardEmbed,
   formatQueue
 } from '../utils/music-ui.js';
+import { handleEconomyCommand } from './economy-handlers-new.js';
 
 const tttGames = new Map();
 const aiThreads = new Map();
@@ -42,7 +56,16 @@ export async function handleCommand(interaction, context) {
     args: {
       query: interaction.options.getString('query'),
       prompt: interaction.options.getString('prompt'),
-      rpsChoice: interaction.options.getString('pilihan')
+      rpsChoice: interaction.options.getString('pilihan'),
+      targetUser: interaction.options.getUser('user'),
+      amount: interaction.options.getInteger('amount'),
+      shopAction: interaction.options.getString('action'),
+      carId: interaction.options.getString('car'),
+      // New options for new systems
+      ticketAction: interaction.options.getString('action'),
+      ticketCategory: interaction.options.getString('category'),
+      ticketSubject: interaction.options.getString('subject'),
+      ticketDescription: interaction.options.getString('description'),
     },
     context,
     guildId: interaction.guildId,
@@ -53,7 +76,8 @@ export async function handleCommand(interaction, context) {
     reply: (payload) => interaction.reply(payload),
     deferReply: (payload) => interaction.deferReply(payload),
     editReply: (payload) => interaction.editReply(payload),
-    sourceChannel: interaction.channel
+    sourceChannel: interaction.channel,
+    interaction: interaction,
   });
 }
 
@@ -110,7 +134,8 @@ export async function handleAiReplyMessage(message, context) {
     const answer = await context.aiService.ask({ userId: message.author.id, prompt, history: existing });
     aiThreads.set(threadKey, [...existing, { role: 'user', text: prompt }, { role: 'assistant', text: answer }].slice(-8));
 
-    const sent = await message.reply({ embeds: [createAiAnswerEmbed({ color: context.env.embedHex, answer })] });
+    const embed = context.aiService.createAnswerEmbed(answer);
+    const sent = await message.reply({ embeds: [embed] });
     rememberAiReply(sent, message.author.id);
   } finally {
     stopTyping();
@@ -217,9 +242,18 @@ async function runCommand(input) {
       }
 
       await deferReply();
-      const track = await musicManager.search(query);
+      
+      // Support both Spotify URLs and regular YouTube search
+      let track;
+      if (musicManager.spotifyService.isSpotifyUrl(query)) {
+        const tracks = await musicManager.handleSpotifyQuery(query);
+        track = tracks && tracks.length > 0 ? tracks[0] : null;
+      } else {
+        track = await musicManager.search(query);
+      }
+
       if (!track) {
-        await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '🔎 Lagu Tidak Ditemukan', description: 'Coba kata kunci lain atau URL yang valid.' })] });
+        await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '🔎 Lagu Tidak Ditemukan', description: 'Coba kata kunci lain atau URL Spotify yang valid.' })] });
         return;
       }
 
@@ -237,7 +271,7 @@ async function runCommand(input) {
         position: result.position
       });
 
-      await editReply({ embeds: [embed], components: createMusicControlComponents(result.queue.autoplay) });
+      await editReply({ embeds: [embed], components: createMusicControlComponents(result.queue.autoplay, result.queue.twentyfourseven, env) });
       return;
     }
 
@@ -286,7 +320,8 @@ async function runCommand(input) {
         const history = aiThreads.get(threadKey) ?? [];
         const answer = await aiService.ask({ userId, prompt, history });
         aiThreads.set(threadKey, [...history, { role: 'user', text: prompt }, { role: 'assistant', text: answer }].slice(-8));
-        const sent = await editReply({ embeds: [createAiAnswerEmbed({ color: env.embedHex, answer })] });
+        const embed = aiService.createAnswerEmbed(answer);
+        const sent = await editReply({ embeds: [embed] });
         rememberAiReply(sent, userId);
       } finally {
         stopTyping();
@@ -341,6 +376,402 @@ async function runCommand(input) {
       return;
     }
 
+    // ===== ECONOMY COMMANDS =====
+    case 'balance': {
+      await deferReply();
+      const economyService = context.economyService;
+      const user = await economyService.getUser(userId, sourceChannel.guild?.members.cache.get(userId)?.user?.username || 'Unknown');
+      if (!user) {
+        await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❌ Error', description: 'Gagal mengambil data saldo.' })] });
+        return;
+      }
+      const rank = await economyService.getUserRank(userId);
+      await editReply({ embeds: [createBalanceEmbed({ user, rank, color: env.embedHex })] });
+      return;
+    }
+
+    case 'daily': {
+      await deferReply();
+      const economyService = context.economyService;
+      const result = await economyService.claimDailyReward(userId, sourceChannel.guild?.members.cache.get(userId)?.user?.username || 'Unknown');
+      
+      if (!result) {
+        await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❌ Error', description: 'Gagal mengklaim reward harian.' })] });
+        return;
+      }
+
+      await editReply({ embeds: [createDailyRewardEmbed({ 
+        reward: result.reward, 
+        streak: result.streak, 
+        canClaim: result.canClaim, 
+        hoursLeft: result.hoursLeft,
+        color: env.embedHex 
+      })] });
+      return;
+    }
+
+    case 'give': {
+      const targetUser = input.args.targetUser || interaction?.options?.getUser('user');
+      const amount = input.args.amount || interaction?.options?.getInteger('amount');
+
+      if (!targetUser || !amount) {
+        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❌ Argument Tidak Lengkap', description: 'Format: `/give @user <jumlah>`' })], ephemeral: true });
+        return;
+      }
+
+      if (targetUser.id === userId) {
+        await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❌ Tidak Bisa Memindahkan Ke Diri Sendiri', description: 'Kamu tidak bisa memberi uang ke dirimu sendiri!' })], ephemeral: true });
+        return;
+      }
+
+      await deferReply();
+      const economyService = context.economyService;
+      const result = await economyService.transferBalance(
+        userId,
+        targetUser.id,
+        amount,
+        sourceChannel.guild?.members.cache.get(userId)?.user?.username || 'Unknown',
+        targetUser.username
+      );
+
+      if (!result) {
+        await editReply({ embeds: [createTransferErrorEmbed({ reason: '❌ Transfer gagal! Saldo tidak cukup atau terjadi kesalahan.', color: env.embedHex })] });
+        return;
+      }
+
+      await editReply({ embeds: [createTransferEmbed({ 
+        fromUser: `<@${userId}>`, 
+        toUser: `<@${targetUser.id}>`, 
+        amount,
+        color: env.embedHex 
+      })] });
+      return;
+    }
+
+    case 'leaderboard': {
+      await deferReply();
+      const economyService = context.economyService;
+      const leaderboard = await economyService.getLeaderboard(10);
+      
+      if (!leaderboard || leaderboard.length === 0) {
+        await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '📊 Leaderboard', description: 'Leaderboard masih kosong!' })] });
+        return;
+      }
+
+      await editReply({ embeds: [createLeaderboardEmbed({ leaderboard, color: env.embedHex })] });
+      return;
+    }
+
+    case 'profile': {
+      await deferReply();
+      const economyService = context.economyService;
+      const user = await economyService.getUser(userId, sourceChannel.guild?.members.cache.get(userId)?.user?.username || 'Unknown');
+      
+      if (!user) {
+        await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❌ Error', description: 'Gagal mengambil data profil.' })] });
+        return;
+      }
+
+      const rank = await economyService.getUserRank(userId);
+      await editReply({ embeds: [createProfileEmbed({ user, rank, color: env.embedHex })] });
+      return;
+    }
+
+    case 'dailycheckin':
+    case 'weeklycheckin':
+    case 'work':
+    case 'beg':
+    case 'race':
+    case 'shop': {
+      return await handleEconomyCommand(command, {
+        userId,
+        member,
+        args,
+        guildId,
+        editReply,
+        deferReply: () => deferReply(),
+        reply,
+        context,
+      });
+    }
+    case 'ticket': {
+      const { ticketService } = context;
+      const action = args.query?.split(' ')[0] || 'create';
+      
+      if (action === 'create') {
+        await deferReply();
+        const category = 'support';
+        const subject = 'General Support';
+        const description = args.query ? args.query.substring(7) : 'No description';
+
+        try {
+          const ticket = await ticketService.createTicket(
+            guildId,
+            userId,
+            interaction?.user?.username || 'Unknown',
+            category,
+            subject,
+            description
+          );
+
+          await editReply({
+            embeds: [
+              createStatusEmbed({
+                color: '#00FF00',
+                title: '🎫 Ticket Created',
+                description: `Ticket ID: \`${ticket.ticketId}\`\nStatus: \`${ticket.status}\`\nCategory: \`${ticket.category}\``,
+              }),
+            ],
+          });
+        } catch (error) {
+          await editReply({
+            embeds: [
+              createStatusEmbed({
+                color: env.embedHex,
+                title: '❌ Error',
+                description: error.message,
+              }),
+            ],
+          });
+        }
+      } else if (action === 'list') {
+        await deferReply();
+        try {
+          const tickets = await ticketService.getUserTickets(userId, guildId);
+          const ticketList = tickets.map((t) => `\`${t.ticketId}\` - ${t.subject} (\`${t.status}\`)`).join('\n') || 'No tickets found';
+
+          await editReply({
+            embeds: [
+              createStatusEmbed({
+                color: '#00CED1',
+                title: '🎫 Your Tickets',
+                description: ticketList,
+              }),
+            ],
+          });
+        } catch (error) {
+          await editReply({
+            embeds: [
+              createStatusEmbed({
+                color: env.embedHex,
+                title: '❌ Error',
+                description: error.message,
+              }),
+            ],
+          });
+        }
+      }
+      return;
+    }
+
+    case 'modmail': {
+      const { modmailService } = context;
+      await deferReply();
+
+      try {
+        let thread = await modmailService.getUserThread(guildId, userId);
+        
+        if (!thread) {
+          thread = await modmailService.createThread(
+            guildId,
+            userId,
+            interaction?.user?.username || 'Unknown'
+          );
+        }
+
+        await editReply({
+          embeds: [
+            createStatusEmbed({
+              color: '#FF69B4',
+              title: '💌 Modmail',
+              description: `Thread ID: \`${thread.threadId}\`\nStatus: \`${thread.status}\`\n\nKirim DM ke bot untuk menghubungi staff!`,
+            }),
+          ],
+        });
+      } catch (error) {
+        await editReply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '❌ Error',
+              description: error.message,
+            }),
+          ],
+        });
+      }
+      return;
+    }
+
+    case 'level': {
+      const { levellingService } = context;
+      await deferReply();
+
+      try {
+        const targetUser = args.targetUser || interaction?.user;
+        const levelData = await levellingService.getLevel(targetUser.id);
+        const rank = await levellingService.getUserRank(targetUser.id);
+
+        if (!levelData) {
+          await editReply({
+            embeds: [
+              createStatusEmbed({
+                color: env.embedHex,
+                title: '📊 Level',
+                description: 'User tidak memiliki data level. Mulai kirim pesan untuk mendapat XP!',
+              }),
+            ],
+          });
+          return;
+        }
+
+        const { generateProfileLevelImage } = await import('../utils/level-image-generator.js');
+        const buffer = await generateProfileLevelImage(targetUser.username, {
+          level: levelData.level,
+          experience: levelData.experience,
+          nextLevelExp: levelData.xpNeeded,
+          rank,
+          totalXp: 0,
+          messagesSent: 0,
+        });
+
+        await editReply({
+          files: [{ attachment: buffer, name: 'level-profile.png' }],
+          embeds: [
+            createStatusEmbed({
+              color: '#00CED1',
+              title: `📊 ${targetUser.username}'s Level Profile`,
+              description: `**Level:** ${levelData.level}\n**XP:** ${levelData.experience}/${levelData.xpNeeded}\n**Rank:** #${rank}`,
+            }),
+          ],
+        });
+      } catch (error) {
+        await editReply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '❌ Error',
+              description: error.message,
+            }),
+          ],
+        });
+      }
+      return;
+    }
+
+    case 'level-leaderboard': {
+      const { levellingService } = context;
+      await deferReply();
+
+      try {
+        const leaderboard = await levellingService.getLeaderboard(guildId, 10);
+        const board = leaderboard
+          .map((u, i) => `**${i + 1}.** ${u.username} - Level **${u.level}** (${u.experience} XP)`)
+          .join('\n');
+
+        await editReply({
+          embeds: [
+            createStatusEmbed({
+              color: '#FFD700',
+              title: '🏆 Level Leaderboard',
+              description: board || 'No data available',
+            }),
+          ],
+        });
+      } catch (error) {
+        await editReply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '❌ Error',
+              description: error.message,
+            }),
+          ],
+        });
+      }
+      return;
+    }
+
+    case 'music-profile': {
+      const { musicLevellingService } = context;
+      await deferReply();
+
+      try {
+        const targetUser = args.targetUser || interaction?.user;
+        const profile = await musicLevellingService.getMusicProfile(targetUser.id, guildId);
+
+        if (!profile) {
+          await editReply({
+            embeds: [
+              createStatusEmbed({
+                color: env.embedHex,
+                title: '🎵 Music Profile',
+                description: 'User belum memiliki profile musik. Mulai dengarkan musik!',
+              }),
+            ],
+          });
+          return;
+        }
+
+        const { generateMusicProfileImage } = await import('../utils/music-profile-generator.js');
+        const buffer = await generateMusicProfileImage({
+          username: targetUser.username,
+          totalTracksPlayed: profile.totalTracksPlayed,
+          totalListeningTime: profile.totalListeningTime,
+          totalListeningSessions: profile.totalListeningSessions,
+          musicLevel: profile.musicLevel,
+          frequentTracks: profile.frequentTracks,
+          frequentArtists: profile.frequentArtists,
+        });
+
+        await editReply({
+          files: [{ attachment: buffer, name: 'music-profile.png' }],
+        });
+      } catch (error) {
+        await editReply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '❌ Error',
+              description: error.message,
+            }),
+          ],
+        });
+      }
+      return;
+    }
+
+    case 'music-leaderboard': {
+      const { musicLevellingService } = context;
+      await deferReply();
+
+      try {
+        const leaderboard = await musicLevellingService.getMusicLeaderboard(guildId, 10);
+        const board = leaderboard
+          .map((u, i) => `**${i + 1}.** ${u.username} - Lvl ${u.level} (${u.totalTracks} tracks)`)
+          .join('\n');
+
+        await editReply({
+          embeds: [
+            createStatusEmbed({
+              color: '#FF6B9D',
+              title: '🎵 Music Leaderboard',
+              description: board || 'No data available',
+            }),
+          ],
+        });
+      } catch (error) {
+        await editReply({
+          embeds: [
+            createStatusEmbed({
+              color: env.embedHex,
+              title: '❌ Error',
+              description: error.message,
+            }),
+          ],
+        });
+      }
+      return;
+    }
     default:
       await reply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '❓ Command Tidak Dikenal', description: `Command \`${command}\` tidak tersedia. Coba \`${env.prefix}help\`.` })] });
   }

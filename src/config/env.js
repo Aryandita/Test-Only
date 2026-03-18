@@ -32,6 +32,19 @@ function resolveEmbedHex() {
   return 0x5865f2;
 }
 
+function resolveEmoji(envValue, defaultEmoji) {
+  // Support format: <:name:id:> untuk custom emoji atau unicode emoji biasa
+  if (!envValue) return defaultEmoji;
+  
+  const customEmojiMatch = envValue.match(/^<:[\w]+:\d+>$/);
+  if (customEmojiMatch) return envValue; // Return custom emoji as-is
+  
+  // Assume it's a unicode emoji
+  if (envValue.length > 0) return envValue;
+  
+  return defaultEmoji;
+}
+
 export const env = {
   token: requireEnv('DISCORD_TOKEN'),
   clientId: requireEnv('DISCORD_CLIENT_ID'),
@@ -42,11 +55,27 @@ export const env = {
   botStatus: (process.env.BOT_STATUS ?? 'online').toLowerCase(),
   botActivityType: (process.env.BOT_ACTIVITY_TYPE ?? 'playing').toLowerCase(),
   botActivityText: process.env.BOT_ACTIVITY_TEXT ?? '!help | Music & Mini Games',
+  defaultLanguage: (process.env.BOT_LANGUAGE ?? 'id').toLowerCase(), // 🌍 Default: Indonesian
   lavalink: {
     host: requireEnv('LAVALINK_HOST'),
     port: Number(process.env.LAVALINK_PORT ?? 2333),
     password: requireEnv('LAVALINK_PASSWORD'),
     secure: process.env.LAVALINK_SECURE === 'true'
   },
-  geminiApiKey: requireEnv('GEMINI_API_KEY')
+  geminiApiKey: requireEnv('GEMINI_API_KEY'),
+  mongodbUri: process.env.MONGODB_URI ?? 'mongodb://localhost:27017/discord-bot',
+  // Music Control Emojis (support format: <:name:id:> atau unicode emoji)
+  emojis: {
+    skip: resolveEmoji(process.env.EMOJI_SKIP, '⏭️'),
+    loop: resolveEmoji(process.env.EMOJI_LOOP, '🔁'),
+    autoplay: resolveEmoji(process.env.EMOJI_AUTOPLAY, '♾️'),
+    stop: resolveEmoji(process.env.EMOJI_STOP, '⏹️'),
+    lyrics: resolveEmoji(process.env.EMOJI_LYRICS, '📝'),
+    playing: resolveEmoji(process.env.EMOJI_PLAYING, '▶️'),
+    paused: resolveEmoji(process.env.EMOJI_PAUSED, '⏸️'),
+    queue: resolveEmoji(process.env.EMOJI_QUEUE, '📋'),
+    volume: resolveEmoji(process.env.EMOJI_VOLUME, '🔊'),
+    success: resolveEmoji(process.env.EMOJI_SUCCESS, '✅'),
+    error: resolveEmoji(process.env.EMOJI_ERROR, '❌')
+  }
 };
