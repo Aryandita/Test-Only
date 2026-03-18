@@ -361,4 +361,103 @@ export function createLyricsEmbed(title, artist, lyrics, color = 0x5865f2) {
     .setFooter({ text: 'Lirik dari sumber online' });
 }
 
+export function createPingEmbed({ botPing, dbPing, lavalinkPing, color = 0x5865f2 }) {
+  const getPingStatus = (ping) => {
+    if (ping < 100) return '🟢 Excellent';
+    if (ping < 200) return '🟡 Good';
+    if (ping < 500) return '🟠 Fair';
+    return '🔴 Poor';
+  };
+
+  return new EmbedBuilder()
+    .setColor(color)
+    .setTitle('🏓 Latency Check')
+    .setDescription('Kecepatan koneksi bot ke berbagai service:')
+    .addFields(
+      {
+        name: '🤖 Bot Latency',
+        value: `${botPing}ms ${getPingStatus(botPing)}`,
+        inline: true
+      },
+      {
+        name: '💾 Database Latency',
+        value: `${dbPing}ms ${dbPing === 'N/A' ? '❌ Unavailable' : getPingStatus(dbPing)}`,
+        inline: true
+      },
+      {
+        name: '🎵 Lavalink Latency',
+        value: `${lavalinkPing}ms ${lavalinkPing === 'N/A' ? '❌ Unavailable' : getPingStatus(lavalinkPing)}`,
+        inline: true
+      }
+    )
+    .setFooter({ text: '⚡ Kecepatan = Kepuasan pengguna!' })
+    .setTimestamp();
+}
+
+export function createStatisticsEmbed({ 
+  botOwner, 
+  nodeVersion, 
+  discordJsVersion, 
+  uptime, 
+  totalGuilds, 
+  totalUsers,
+  cpuUsage,
+  memoryUsage,
+  color = 0x5865f2 
+}) {
+  const uptimeHours = Math.floor(uptime / 3600);
+  const uptimeMinutes = Math.floor((uptime % 3600) / 60);
+  const uptimeSeconds = Math.floor(uptime % 60);
+
+  return new EmbedBuilder()
+    .setColor(color)
+    .setTitle('📊 Statistik Bot')
+    .setDescription('Informasi lengkap tentang bot dan sistemnya:')
+    .addFields(
+      {
+        name: '👑 Pemilik Bot',
+        value: `<@${botOwner}>`,
+        inline: true
+      },
+      {
+        name: '⚙️ Versi Node.js',
+        value: nodeVersion,
+        inline: true
+      },
+      {
+        name: '💬 Versi Discord.js',
+        value: discordJsVersion,
+        inline: true
+      },
+      {
+        name: '⏱️ Bot Uptime',
+        value: `${uptimeHours}h ${uptimeMinutes}m ${uptimeSeconds}s`,
+        inline: true
+      },
+      {
+        name: '🏢 Total Guild',
+        value: `${totalGuilds} server`,
+        inline: true
+      },
+      {
+        name: '👥 Total User',
+        value: `${totalUsers} user`,
+        inline: true
+      },
+      {
+        name: '💻 CPU Usage',
+        value: `${cpuUsage}%`,
+        inline: true
+      },
+      {
+        name: '🧠 Memory Usage',
+        value: `${memoryUsage}`,
+        inline: true
+      }
+    )
+    .setFooter({ text: '✨ Dibuat dengan ❤️ menggunakan Discord.js' })
+    .setTimestamp();
+}
+
+
 

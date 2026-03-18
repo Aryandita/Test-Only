@@ -1,3 +1,22 @@
+/**
+ * 🔥 MAIN BOT ENTRY POINT
+ * 
+ * FLOW:
+ * 1. Bootstrap initialization (validate dependencies + env vars)
+ * 2. Load all Discord.js modules
+ * 3. Initialize services
+ * 4. Startup bot
+ */
+
+import { initializeBootstrap } from './bootstrap.js';
+
+// Initialize bootstrap FIRST (validate dependencies & env vars)
+await initializeBootstrap().catch(error => {
+  console.error('\n❌ Bootstrap failed! Bot cannot start.\n');
+  process.exit(1);
+});
+
+// After bootstrap succeed, import everything else
 import { ActivityType, Client, GatewayIntentBits } from 'discord.js';
 import { env } from './config/env.js';
 import { AIService } from './services/ai-service.js';

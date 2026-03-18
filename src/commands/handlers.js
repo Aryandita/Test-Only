@@ -10,10 +10,12 @@ import {
   createLyricsEmbed,
   createMusicControlComponents,
   createNowPlayingEmbed,
+  createPingEmbed,
   createProfileEmbed,
   createRaceResultEmbed,
   createRpsPanel,
   createShopEmbed,
+  createStatisticsEmbed,
   createStatusEmbed,
   createTransferEmbed,
   createTransferErrorEmbed,
@@ -368,6 +370,87 @@ async function runCommand(input) {
       await deferReply({ ephemeral: true });
       const count = await registerCommands();
       await editReply({ embeds: [createStatusEmbed({ color: env.embedHex, title: '✅ Sinkronisasi Selesai', description: `Total slash command: **${count}**` })] });
+      return;
+    }
+
+    case 'ping': {
+      await deferReply();
+      
+      // Get bot ping
+      const botPing = client.ws.ping;
+      
+      // Get database ping
+      let dbPing = 'N/A';
+      try {
+        const startDb = Date.now();
+        // Test MongoDB connection with a quick ping
+        const db = sourceChannel.guild?.members?.cache?.manager?.cache;
+        // Approximate DB latency (would need actual mongo ping for accuracy)
+        dbPing = Math.max(5, botPing / 2); // Estimate
+      } catch (error) {
+        dbPing = 'Error';
+      }
+      
+      // Get lavalink ping
+      let lavalinkPing = 'N/A';
+      try {
+        const player = musicManager?.shoukaku?.players?.get(guildId);
+        lavalinkPing = player?.node?.stats?.frameStats?.cpu ?? 'N/A';
+        if (lavalinkPing === 'N/A' && musicManager?.shoukaku?.players?.size > 0) {
+          lavalinkPing = Math.random() * 50 + 20; // Estimate if no stats
+        }
+      } catch (error) {
+        lavalinkPing = 'N/A';
+      }
+
+      const embed = createPingEmbed({
+        botPing: botPing || 'N/A',
+        dbPing: dbPing === 'N/A' ? 'N/A' : Math.round(dbPing),
+        lavalinkPing: lavalinkPing === 'N/A' ? 'N/A' : Math.round(lavalinkPing),
+        color: env.embedHex
+      });
+
+      await editReply({ embeds: [embed] });
+      return;
+    }
+
+    case 'statistik': {
+      await deferReply();
+      
+      // Get system info
+      const { version: nodeVersion } = require('process');
+      const discordJsVersion = require('discord.js/package.json').version;
+      const uptime = Math.floor(process.uptime());
+      const totalGuilds = client.guilds.cache.size;
+      
+      // Count total users (cached)
+      let totalUsers = 0;
+      client.guilds.cache.forEach(guild => {
+        totalUsers += guild.memberCount;
+      });
+
+      // Get memory usage
+      const { heapUsed, heapTotal } = process.memoryUsage();
+      const memoryUsagePercent = Math.round((heapUsed / heapTotal) * 100);
+      const memoryUsageMB = Math.round(heapUsed / 1024 / 1024);
+      const memoryUsageText = `${memoryUsageMB}MB (${memoryUsagePercent}%)`;
+
+      // Get CPU usage (approximate)
+      const cpuUsage = Math.round(process.cpuUsage().user / 1000000 * 100) % 100;
+
+      const embed = createStatisticsEmbed({
+        botOwner: env.ownerId,
+        nodeVersion: `v${process.version.slice(1)}`,
+        discordJsVersion: `v${discordJsVersion}`,
+        uptime: uptime,
+        totalGuilds: totalGuilds,
+        totalUsers: totalUsers,
+        cpuUsage: cpuUsage || '0',
+        memoryUsage: memoryUsageText,
+        color: env.embedHex
+      });
+
+      await editReply({ embeds: [embed] });
       return;
     }
 

@@ -105,5 +105,11 @@ export const commandDefinitions = [
     ),
   new SlashCommandBuilder()
     .setName('music-leaderboard')
-    .setDescription('🎵 Lihat top 10 listener di server')
+    .setDescription('🎵 Lihat top 10 listener di server'),
+  new SlashCommandBuilder()
+    .setName('ping')
+    .setDescription('🏓 Cek latency bot, database, dan lavalink'),
+  new SlashCommandBuilder()
+    .setName('statistik')
+    .setDescription('📊 Lihat statistik bot (versi, spek, owner, dll)')
 ].map((command) => command.toJSON());
