@@ -1,4 +1,8 @@
-import 'dotenv/config';
+/**
+ * ⚠️  IMPORTANT: dotenv is loaded in index.js BEFORE this is imported
+ * So process.env variables are already available here
+ * DO NOT import 'dotenv/config' here - it's already done!
+ */
 
 function requireEnv(name) {
   const value = process.env[name];

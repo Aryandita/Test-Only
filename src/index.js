@@ -2,11 +2,16 @@
  * 🔥 MAIN BOT ENTRY POINT
  * 
  * FLOW:
- * 1. Bootstrap initialization (validate dependencies + env vars)
- * 2. Load all Discord.js modules
- * 3. Initialize services
- * 4. Startup bot
+ * 1. LOAD DOTENV FIRST (before any imports that use process.env)
+ * 2. Bootstrap initialization (validate dependencies + env vars)
+ * 3. Load all Discord.js modules
+ * 4. Initialize services
+ * 5. Startup bot
  */
+
+// ⚠️  CRITICAL: Load dotenv IMMEDIATELY before any other imports
+// This ensures all process.env variables are available
+import 'dotenv/config';
 
 import { initializeBootstrap } from './bootstrap.js';
 

@@ -1,9 +1,9 @@
 /**
- * 🔥 BOOTSTRAP FILE - MAIN ENTRY POINT UNTUK SETUP & DEPENDENCIES
+ * 🔥 BOOTSTRAP FILE - DEPENDENCY & ENVIRONMENT VALIDATION
  * 
  * FILE INI BERFUNGSI UNTUK:
  * ✅ Validate semua dependencies yang diperlukan
- * ✅ Centralize semua imports utama
+ * ✅ Validate environment variables
  * ✅ Provide error handling yang jelas
  * ✅ Support hosted users yang tidak bisa npm install
  * 
@@ -18,13 +18,22 @@
  *    - GEMINI_API_KEY
  *    - LAVALINK_HOST, LAVALINK_PORT, LAVALINK_PASSWORD
  * 4. Jalankan: node src/index.js
+ * 
+ * ⚠️  PENTING: Jangan import 'dotenv/config' di file ini!
+ *    Dotenv harus di-load di index.js SEBELUM bootstrap
  */
 
-import 'dotenv/config';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { existsSync } from 'fs';
 
 // ============================================
-// 📦 DEPENDENCY VALIDATION & IMPORTS
+// 📦 DEPENDENCY VALIDATION (ESM METHOD)
 // ============================================
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const nodeModulesPath = join(__dirname, '..', '..', 'node_modules');
 
 const REQUIRED_PACKAGES = {
   'discord.js': '^14.19.3',
@@ -40,31 +49,70 @@ const OPTIONAL_PACKAGES = {
 };
 
 /**
- * Validate apakah package bisa di-require
+ * ESM-compatible package validation using fs.existsSync
  */
 function validatePackage(packageName) {
+  const packagePath = join(nodeModulesPath, packageName);
+  const packageJsonPath = join(packagePath, 'package.json');
+  
+  if (!existsSync(packageJsonPath)) {
+    return { 
+      success: false, 
+      error: `Cannot find module '${packageName}'`,
+      expectedVersion: REQUIRED_PACKAGES[packageName] || 'unknown'
+    };
+  }
+  
   try {
-    require.resolve(packageName);
-    return { success: true, version: getPackageVersion(packageName) };
+    const { readFileSync } = await import('fs').then(m => ({ readFileSync: m.readFileSync }));
+    const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+    return { success: true, version: pkg.version };
   } catch (error) {
     return { 
       success: false, 
       error: error.message,
-      expectedVersion: REQUIRED_PACKAGES[packageName] || 'unknown'
+      expectedVersion: REQUIRED_PACKAGES[packageName] || 'unknown',
+      version: 'unknown'
     };
   }
 }
 
 /**
- * Get version dari package.json
+ * Synchronous package validation (no await needed)
  */
-function getPackageVersion(packageName) {
-  try {
-    const pkg = require(`${packageName}/package.json`);
-    return pkg.version;
-  } catch {
-    return 'unknown';
+function validatePackageSync(packageName) {
+  const packagePath = join(nodeModulesPath, packageName);
+  const packageJsonPath = join(packagePath, 'package.json');
+  
+  if (!existsSync(packageJsonPath)) {
+    return { 
+      success: false, 
+      error: `Cannot find module '${packageName}'`,
+      expectedVersion: REQUIRED_PACKAGES[packageName] || 'unknown'
+    };
   }
+
+  try {
+    // Import readFileSync statically
+    const fs = require('fs');
+    const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    return { success: true, version: pkg.version };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message,
+      expectedVersion: REQUIRED_PACKAGES[packageName] || 'unknown',
+      version: 'unknown'
+    };
+  }
+}
+
+/**
+ * Simplified version - just check if directory exists
+ */
+function checkPackageExists(packageName) {
+  const packagePath = join(nodeModulesPath, packageName);
+  return existsSync(packagePath);
 }
 
 /**
