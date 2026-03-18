@@ -26,6 +26,7 @@ import { ActivityType, Client, GatewayIntentBits } from 'discord.js';
 import { env } from './config/env.js';
 import { AIService } from './services/ai-service.js';
 import { MusicManager } from './services/music-manager.js';
+import { MusicLevellingService } from './services/levelling-service.js';
 import EconomyService from './services/economy-service.js';
 import greetingService from './services/greeting-service.js';
 import boostService from './services/boost-service.js';
